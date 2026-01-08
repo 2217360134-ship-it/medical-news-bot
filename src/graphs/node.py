@@ -17,8 +17,8 @@ from jinja2 import Template
 
 def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runtime[Context]) -> FetchNewsOutput:
     """
-    title: 获取今日头条新闻
-    desc: 从今日头条获取医疗器械和医美相关的新闻
+    title: 获取指定来源新闻
+    desc: 从今日头条、搜狐、人民网、新华网、央视网等获取医疗器械和医美相关的新闻
     integrations: 联网搜索
     """
     ctx = runtime.context
@@ -28,23 +28,28 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
     
     news_list = []
     
+    # 定义目标新闻来源域名（最多支持5个）
+    target_sites = "toutiao.com|sohu.com|people.com.cn|xinhuanet.com|cctv.com"
+    
     try:
-        # 搜索医疗器械相关新闻
+        # 搜索医疗器械相关新闻（限定来源）
         web_items1, _, _, _ = web_search(
             ctx=ctx,
             query="医疗器械",
             search_type="web",
             count=20,
-            need_summary=True
+            need_summary=True,
+            sites=target_sites
         )
         
-        # 搜索医美相关新闻
+        # 搜索医美相关新闻（限定来源）
         web_items2, _, _, _ = web_search(
             ctx=ctx,
             query="医美",
             search_type="web",
             count=20,
-            need_summary=True
+            need_summary=True,
+            sites=target_sites
         )
         
         # 合并搜索结果
