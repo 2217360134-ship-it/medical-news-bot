@@ -74,15 +74,30 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
             )
             news_list.append(news_item)
         
-        # 去重（根据URL）
+        # 去重逻辑
+        # 1. 根据URL去重
         seen_urls = set()
-        unique_news = []
+        unique_by_url = []
         for news in news_list:
             if news.url not in seen_urls:
                 seen_urls.add(news.url)
-                unique_news.append(news)
+                unique_by_url.append(news)
         
-        return FetchNewsOutput(news_list=unique_news)
+        # 2. 根据标题相似度去重（避免不同网站的相同新闻）
+        seen_titles = set()
+        final_news = []
+        for news in unique_by_url:
+            # 标准化标题：去除空格和特殊字符，转小写
+            normalized_title = news.title.lower().strip()
+            # 移除一些常见的网站名称后缀
+            for suffix in ['| toutiao', '- 今日头条', '_头条', '_新闻', '_资讯']:
+                normalized_title = normalized_title.replace(suffix.lower(), '')
+            
+            if normalized_title not in seen_titles:
+                seen_titles.add(normalized_title)
+                final_news.append(news)
+        
+        return FetchNewsOutput(news_list=final_news)
         
     except Exception as e:
         raise Exception(f"获取新闻失败: {str(e)}")
@@ -95,12 +110,28 @@ def filter_news_node(state: FilterNewsInput, config: RunnableConfig, runtime: Ru
     """
     ctx = runtime.context
     
-    # 定义医疗器械和医美相关关键词
+    # 定义医疗器械和医美相关关键词（更精确）
     medical_keywords = [
+        # 医疗器械设备
         '医疗器械', '医疗设备', '手术器械', '诊断设备', '治疗设备',
         '医疗影像', '监护设备', '呼吸机', '心电', '超声', 'CT', 'MRI',
-        '医美', '医疗美容', '整形', '美容', '注射', '激光', '抗衰老',
-        '植发', '隆鼻', '隆胸', '吸脂', '微整', '皮肤管理', '牙科', '齿科'
+        # 医美相关
+        '医美', '医疗美容', '整形', '美容注射', '激光美容', '抗衰老',
+        '植发', '隆鼻', '隆胸', '吸脂', '微整', '皮肤管理',
+        # 公司和技术相关
+        '迈瑞医疗', '联影医疗', '微创医疗', '威高集团', '乐普医疗',
+        '骨科植入', '介入治疗', '体外诊断', 'IVD', '耗材',
+        # 融资相关
+        '融资', '上市', 'IPO', '投资', '并购', '收购',
+        '医疗器械融资', '医美融资', '估值'
+    ]
+    
+    # 排除关键词（不包含这些内容的新闻将被排除）
+    exclude_keywords = [
+        '美容护肤', '化妆品', '面膜', '护肤品', '洗发水',
+        '美妆', '彩妆', '日常护理', '生活美容',
+        '广告', '促销', '优惠', '打折', '活动',
+        '双十一', '618', '购物', '电商'
     ]
     
     filtered_news = []
@@ -110,12 +141,24 @@ def filter_news_node(state: FilterNewsInput, config: RunnableConfig, runtime: Ru
         title_lower = news.title.lower()
         summary_lower = news.summary.lower()
         
+        # 检查是否包含排除关键词（如果包含，直接跳过）
+        is_excluded = False
+        for exclude_keyword in exclude_keywords:
+            if exclude_keyword.lower() in title_lower or exclude_keyword.lower() in summary_lower:
+                is_excluded = True
+                break
+        
+        if is_excluded:
+            continue
+        
+        # 检查是否包含医疗器械相关关键词
         is_related = False
         for keyword in medical_keywords:
             if keyword.lower() in title_lower or keyword.lower() in summary_lower:
                 is_related = True
                 break
         
+        # 只保留相关的新闻
         if is_related:
             filtered_news.append(news)
     
@@ -272,6 +315,22 @@ def sync_to_feishu_node(state: SyncToFeishuInput, config: RunnableConfig, runtim
                                 {
                                     "field_name": "标题",
                                     "type": 1
+                                },
+                                {
+                                    "field_name": "日期",
+                                    "type": 1
+                                },
+                                {
+                                    "field_name": "关键词",
+                                    "type": 1
+                                },
+                                {
+                                    "field_name": "链接",
+                                    "type": 1
+                                },
+                                {
+                                    "field_name": "摘要",
+                                    "type": 1
                                 }
                             ]
                         }
@@ -304,9 +363,16 @@ def sync_to_feishu_node(state: SyncToFeishuInput, config: RunnableConfig, runtim
         # 准备批量插入的记录
         records = []
         for news in state.news_list:
+            # 将关键词列表转换为逗号分隔的字符串
+            keywords_str = ", ".join(news.keywords) if news.keywords else ""
+            
             records.append({
                 "fields": {
-                    "标题": str(news.title) if news.title else ""
+                    "标题": str(news.title) if news.title else "",
+                    "日期": str(news.date) if news.date else "",
+                    "关键词": keywords_str,
+                    "链接": str(news.url) if news.url else "",
+                    "摘要": str(news.summary) if news.summary else ""
                 }
             })
         
