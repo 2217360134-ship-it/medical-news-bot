@@ -6,6 +6,7 @@ from graphs.state import (
     FilterNewsInput, FilterNewsOutput,
     ExtractKeywordsInput, ExtractKeywordsOutput,
     SyncToFeishuInput, SyncToFeishuOutput,
+    SendEmailInput, SendEmailOutput,
     NewsItem
 )
 import os
@@ -265,8 +266,8 @@ def extract_keywords_node(state: ExtractKeywordsInput, config: RunnableConfig, r
 
 def sync_to_feishu_node(state: SyncToFeishuInput, config: RunnableConfig, runtime: Runtime[Context]) -> SyncToFeishuOutput:
     """
-    title: 同步到飞书多维表格
-    desc: 将新闻数据批量写入飞书多维表格
+    title: 同步到飞书表格
+    desc: 将新闻数据批量写入飞书表格
     integrations: 飞书多维表格
     """
     ctx = runtime.context
@@ -279,6 +280,7 @@ def sync_to_feishu_node(state: SyncToFeishuInput, config: RunnableConfig, runtim
         if not state.news_list:
             print("警告：没有新闻需要同步")
             return SyncToFeishuOutput(
+                news_list=[],
                 synced_count=0,
                 app_token="",
                 table_id=""
@@ -399,6 +401,7 @@ def sync_to_feishu_node(state: SyncToFeishuInput, config: RunnableConfig, runtim
             synced_count = 0
         
         return SyncToFeishuOutput(
+            news_list=state.news_list,
             synced_count=synced_count,
             app_token=app_token,
             table_id=table_id
@@ -406,3 +409,142 @@ def sync_to_feishu_node(state: SyncToFeishuInput, config: RunnableConfig, runtim
         
     except Exception as e:
         raise Exception(f"同步到飞书失败: {str(e)}")
+
+
+def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runtime[Context]) -> SendEmailOutput:
+    """
+    title: 发送邮件通知
+    desc: 将新闻汇总信息发送到指定邮箱
+    integrations: 邮件
+    """
+    ctx = runtime.context
+    
+    try:
+        # 导入邮件相关模块
+        import smtplib
+        import ssl
+        from email.mime.text import MIMEText
+        from email.header import Header
+        from email.utils import formataddr, formatdate, make_msgid
+        from coze_workload_identity import Client
+        
+        # 获取邮件配置
+        client = Client()
+        email_credential = client.get_integration_credential("integration-email-imap-smtp")
+        email_config = json.loads(email_credential)
+        
+        # 检查是否有新闻数据
+        if not state.news_list:
+            return SendEmailOutput(
+                email_sent=False,
+                email_message="没有新闻需要发送"
+            )
+        
+        # 构建邮件内容（HTML格式）
+        from datetime import datetime
+        today = datetime.now().strftime("%Y-%m-%d")
+        
+        html_content = f"""
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 800px; margin: 0 auto; padding: 20px; }}
+                .header {{ background-color: #4CAF50; color: white; padding: 20px; text-align: center; }}
+                .summary {{ background-color: #f8f8f8; padding: 15px; border-radius: 5px; margin: 20px 0; }}
+                .news-item {{ border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px; }}
+                .news-item:hover {{ box-shadow: 0 2px 5px rgba(0,0,0,0.1); }}
+                .news-title {{ font-size: 18px; font-weight: bold; margin-bottom: 10px; color: #2c3e50; }}
+                .news-meta {{ color: #666; font-size: 14px; margin-bottom: 10px; }}
+                .news-summary {{ margin-bottom: 10px; }}
+                .news-keywords {{ color: #e74c3c; font-size: 14px; }}
+                .news-link {{ color: #3498db; text-decoration: none; }}
+                .news-link:hover {{ text-decoration: underline; }}
+                .footer {{ text-align: center; margin-top: 30px; color: #999; font-size: 12px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h2>医疗器械医美新闻汇总</h2>
+                    <p>日期: {today}</p>
+                </div>
+                
+                <div class="summary">
+                    <p><strong>共收集到 {len(state.news_list)} 条相关新闻</strong></p>
+                    <p>来源: 今日头条、搜狐、人民网、新华网、央视网</p>
+                </div>
+        """
+        
+        # 添加每条新闻
+        for idx, news in enumerate(state.news_list, 1):
+            keywords_str = ", ".join(news.keywords) if news.keywords else "无"
+            html_content += f"""
+                <div class="news-item">
+                    <div class="news-title">{idx}. {news.title}</div>
+                    <div class="news-meta">
+                        <strong>日期:</strong> {news.date} | 
+                        <strong>关键词:</strong> <span class="news-keywords">{keywords_str}</span>
+                    </div>
+                    <div class="news-summary">
+                        <strong>摘要:</strong> {news.summary}
+                    </div>
+                    <div>
+                        <a href="{news.url}" class="news-link">查看原文 &rarr;</a>
+                    </div>
+                </div>
+            """
+        
+        html_content += f"""
+                <div class="footer">
+                    <p>此邮件由新闻收集工作流自动发送</p>
+                    <p>如有问题，请联系管理员</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        # 创建邮件对象
+        msg = MIMEText(html_content, 'html', 'utf-8')
+        msg["From"] = formataddr(("新闻收集助手", email_config["account"]))
+        msg["To"] = state.email
+        msg["Subject"] = Header(f"医疗器械医美新闻汇总 - {today}", 'utf-8')
+        msg["Date"] = formatdate(localtime=True)
+        msg["Message-ID"] = make_msgid()
+        
+        # 发送邮件
+        ctx_ssl = ssl.create_default_context()
+        ctx_ssl.minimum_version = ssl.TLSVersion.TLSv1_2
+        
+        with smtplib.SMTP_SSL(
+            email_config["smtp_server"],
+            email_config["smtp_port"],
+            context=ctx_ssl,
+            timeout=30
+        ) as server:
+            server.ehlo()
+            server.login(email_config["account"], email_config["auth_code"])
+            server.sendmail(email_config["account"], [state.email], msg.as_string())
+            server.quit()
+        
+        return SendEmailOutput(
+            email_sent=True,
+            email_message=f"邮件已成功发送到 {state.email}，包含 {len(state.news_list)} 条新闻"
+        )
+        
+    except smtplib.SMTPAuthenticationError as e:
+        return SendEmailOutput(
+            email_sent=False,
+            email_message=f"邮件认证失败: {str(e)}"
+        )
+    except smtplib.SMTPRecipientsRefused as e:
+        return SendEmailOutput(
+            email_sent=False,
+            email_message=f"收件人地址被拒绝"
+        )
+    except Exception as e:
+        return SendEmailOutput(
+            email_sent=False,
+            email_message=f"发送邮件失败: {str(e)}"
+        )
