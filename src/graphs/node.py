@@ -23,7 +23,7 @@ from jinja2 import Template
 def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runtime[Context]) -> FetchNewsOutput:
     """
     title: 获取指定来源新闻
-    desc: 从今日头条、搜狐、人民网、新华网、央视网以及公众号"医业观察"获取医疗器械和医美相关的新闻
+    desc: 从今日头条、搜狐、人民网、新华网、央视网等获取医疗器械和医美相关的新闻
     integrations: 联网搜索
     """
     ctx = runtime.context
@@ -42,41 +42,47 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
     # 定义目标新闻来源域名（最多支持5个）
     target_sites = "toutiao.com|sohu.com|people.com.cn|xinhuanet.com|cctv.com"
     
-    # 优化后的搜索词列表
-    # 常规搜索：医疗器械和医美相关（指定sites）
-    regular_queries = [
-        "医疗器械",
-        "医美"
+    # 构建核心搜索词列表（确保获取的新闻主体内容与医疗器械、医美相关）
+    medical_device_queries = [
+        "医疗器械公司",
+        "医疗器械产品",
+        "医疗器械技术",
+        "医疗设备",
+        "诊断设备",
+        "IVD 体外诊断",
+        "医疗器械融资",
+        "医疗器械上市"
     ]
     
-    # 公众号"医业观察"专用搜索（不指定sites）
-    yiye_guancha_queries = [
-        "医业观察"
+    medical_beauty_queries = [
+        "医美公司",
+        "医美产品",
+        "医美技术",
+        "激光美容",
+        "整形美容",
+        "微整形",
+        "医美融资",
+        "医美上市"
     ]
     
     try:
-        # 并行搜索所有查询
+        # 并行搜索所有医疗器械相关查询
         all_web_items = []
         search_success_count = 0
         search_fail_count = 0
         
-        print(f"开始搜索新闻")
-        print(f"  - 常规来源网站: {target_sites}")
-        print(f"  - 公众号: 医业观察（全网搜索）")
+        print(f"开始搜索新闻，目标网站: {target_sites}")
         
-        # 搜索常规医疗器械和医美相关查询（指定sites）
-        for query in regular_queries:
+        for query in medical_device_queries:
             try:
-                print(f"正在搜索: {query} (目标网站: {target_sites})")
                 web_items, _, _, _ = web_search(
                     ctx=ctx,
                     query=query,
                     search_type="web",
-                    count=8,
+                    count=10,
                     need_summary=True,
                     sites=target_sites
                 )
-                print(f"  - 返回了 {len(web_items)} 条结果")
                 all_web_items.extend(web_items)
                 search_success_count += 1
                 print(f"[成功] 搜索 '{query}' 获取到 {len(web_items)} 条新闻")
@@ -85,26 +91,22 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
                 print(f"[失败] 搜索 '{query}' 失败: {str(e)}")
                 continue
         
-        # 搜索公众号"医业观察"（不指定sites，从全网搜索）
-        print(f"\n开始搜索公众号'医业观察'的内容...")
-        for query in yiye_guancha_queries:
+        for query in medical_beauty_queries:
             try:
-                print(f"正在搜索: {query} (全网搜索)")
                 web_items, _, _, _ = web_search(
                     ctx=ctx,
                     query=query,
                     search_type="web",
-                    count=8,
+                    count=10,
                     need_summary=True,
-                    sites=None  # 不限制网站，可以搜索到公众号内容
+                    sites=target_sites
                 )
-                print(f"  - 返回了 {len(web_items)} 条结果")
                 all_web_items.extend(web_items)
                 search_success_count += 1
-                print(f"[成功] 公众号搜索 '{query}' 获取到 {len(web_items)} 条新闻")
+                print(f"[成功] 搜索 '{query}' 获取到 {len(web_items)} 条新闻")
             except Exception as e:
                 search_fail_count += 1
-                print(f"[失败] 公众号搜索 '{query}' 失败: {str(e)}")
+                print(f"[失败] 搜索 '{query}' 失败: {str(e)}")
                 continue
         
         print(f"搜索完成: 成功 {search_success_count} 个查询，失败 {search_fail_count} 个查询")
@@ -117,10 +119,6 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
             print("  1. 网络搜索服务暂时不可用")
             print("  2. 目标网站没有相关新闻")
             print("  3. 搜索词需要调整")
-            print("  4. 搜索服务限流")
-            print("建议: 稍后重试或联系管理员检查搜索服务状态")
-        else:
-            print(f"✓ 成功获取到 {len(all_web_items)} 条新闻")
         
         # 转换为NewsItem格式
         for item in all_web_items:
