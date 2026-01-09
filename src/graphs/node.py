@@ -4,6 +4,7 @@ from coze_coding_utils.runtime_ctx.context import Context
 from graphs.state import (
     FetchNewsInput, FetchNewsOutput,
     FilterNewsInput, FilterNewsOutput,
+    GenerateSummaryInput, GenerateSummaryOutput,
     ExtractKeywordsInput, ExtractKeywordsOutput,
     CreateTableInput, CreateTableOutput,
     SendEmailInput, SendEmailOutput,
@@ -169,6 +170,98 @@ def filter_news_node(state: FilterNewsInput, config: RunnableConfig, runtime: Ru
             filtered_news.append(news)
     
     return FilterNewsOutput(filtered_news_list=filtered_news)
+
+
+def generate_summary_node(state: GenerateSummaryInput, config: RunnableConfig, runtime: Runtime[Context]) -> GenerateSummaryOutput:
+    """
+    title: 生成新闻摘要
+    desc: 使用大语言模型为每条新闻生成真实的精简摘要
+    integrations: 大语言模型
+    """
+    ctx = runtime.context
+    
+    # 读取配置文件
+    cfg_file = os.path.join(os.getenv("COZE_WORKSPACE_PATH"), config['metadata']['llm_cfg'])
+    with open(cfg_file, 'r') as fd:
+        _cfg = json.load(fd)
+    
+    llm_config = _cfg.get("config", {})
+    system_prompt = _cfg.get("sp", "")
+    user_prompt_template = _cfg.get("up", "")
+    
+    # 导入大语言模型调用
+    from langchain_openai import ChatOpenAI
+    from langchain_core.messages import SystemMessage, HumanMessage, BaseMessageChunk
+    from coze_coding_utils.runtime_ctx.context import default_headers
+    
+    api_key = os.getenv("COZE_WORKLOAD_IDENTITY_API_KEY")
+    base_url = os.getenv("COZE_INTEGRATION_MODEL_BASE_URL")
+    
+    summarized_news = []
+    
+    for news in state.news_list:
+        try:
+            # 渲染用户提示词
+            up_tpl = Template(user_prompt_template)
+            user_prompt = up_tpl.render({
+                "title": news.title,
+                "original_summary": news.summary,
+                "url": news.url
+            })
+            
+            # 调用大语言模型
+            llm = ChatOpenAI(
+                model=llm_config.get("model", "doubao-seed-1-6-251015"),
+                api_key=api_key,
+                base_url=base_url,
+                streaming=True,
+                extra_body={
+                    "thinking": {
+                        "type": "disabled"
+                    }
+                },
+                temperature=llm_config.get("temperature", 0.5),
+                max_tokens=llm_config.get("max_tokens", 300),
+                default_headers=default_headers(ctx),
+            )
+            
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt)
+            ]
+            
+            # 收集流式输出
+            result_text = ""
+            for chunk in llm.stream(messages):
+                if isinstance(chunk.content, str):
+                    result_text += chunk.content
+                elif isinstance(chunk.content, list):
+                    for item in chunk.content:
+                        if isinstance(item, str):
+                            result_text += item
+            
+            # 解析结果 - 尝试提取JSON格式的摘要
+            try:
+                import re
+                json_match = re.search(r'\{[^}]*"summary"[^}]*\}', result_text)
+                if json_match:
+                    result_json = json.loads(json_match.group())
+                    summary = result_json.get("summary", result_text)
+                else:
+                    summary = result_text.strip()
+            except:
+                summary = result_text.strip()
+            
+            # 更新新闻项的摘要
+            news.summary = summary
+            summarized_news.append(news)
+            
+        except Exception as e:
+            # 如果生成摘要失败，保留原始摘要
+            print(f"生成摘要失败: {str(e)}, 使用原始摘要")
+            summarized_news.append(news)
+    
+    return GenerateSummaryOutput(summarized_news_list=summarized_news)
 
 
 def extract_keywords_node(state: ExtractKeywordsInput, config: RunnableConfig, runtime: Runtime[Context]) -> ExtractKeywordsOutput:
@@ -441,7 +534,7 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
         # 创建多部分邮件
         msg = MIMEMultipart()
         msg["From"] = formataddr(("新闻收集助手", email_config["account"]))
-        msg["To"] = state.email
+        msg["To"] = ", ".join(state.emails)  # 支持多个收件人
         msg["Subject"] = Header(f"医疗器械医美新闻汇总 - {today}", 'utf-8')
         msg["Date"] = formatdate(localtime=True)
         msg["Message-ID"] = make_msgid()
@@ -473,12 +566,13 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
         ) as server:
             server.ehlo()
             server.login(email_config["account"], email_config["auth_code"])
-            server.sendmail(email_config["account"], [state.email], msg.as_string())
+            # 发送给所有收件人
+            server.sendmail(email_config["account"], state.emails, msg.as_string())
             server.quit()
         
         return SendEmailOutput(
             email_sent=True,
-            email_message=f"邮件已成功发送到 {state.email}，包含 {len(state.news_list)} 条新闻及Excel附件"
+            email_message=f"邮件已成功发送到 {', '.join(state.emails)}，包含 {len(state.news_list)} 条新闻及Excel附件"
         )
         
     except smtplib.SMTPAuthenticationError as e:

@@ -13,8 +13,8 @@ class NewsItem(BaseModel):
 
 class GlobalState(BaseModel):
     """全局状态定义"""
-    # 邮件信息
-    email: str = Field(default="", description="接收邮件的邮箱地址")
+    # 邮件信息（支持最多3个邮箱地址，至少1个必填）
+    emails: List[str] = Field(..., description="接收邮件的邮箱地址列表，支持1-3个邮箱地址")
     
     # 表格文件信息
     table_filepath: str = Field(default="", description="Excel表格文件路径")
@@ -23,6 +23,7 @@ class GlobalState(BaseModel):
     # 新闻数据流
     raw_news_list: List[NewsItem] = Field(default=[], description="从今日头条获取的原始新闻列表")
     filtered_news_list: List[NewsItem] = Field(default=[], description="筛选后的医疗器械和医美相关新闻")
+    summarized_news_list: List[NewsItem] = Field(default=[], description="生成摘要后的新闻列表")
     enriched_news_list: List[NewsItem] = Field(default=[], description="提取关键词后的新闻列表")
     
     # 结果
@@ -33,7 +34,7 @@ class GlobalState(BaseModel):
 
 class GraphInput(BaseModel):
     """工作流的输入"""
-    email: str = Field(..., description="接收邮件的邮箱地址")
+    emails: List[str] = Field(..., description="接收邮件的邮箱地址列表，支持1-3个邮箱地址，至少1个必填")
 
 
 class GraphOutput(BaseModel):
@@ -63,6 +64,16 @@ class FilterNewsOutput(BaseModel):
     filtered_news_list: List[NewsItem] = Field(..., description="筛选后的新闻列表")
 
 
+class GenerateSummaryInput(BaseModel):
+    """生成摘要节点的输入"""
+    news_list: List[NewsItem] = Field(..., description="需要生成摘要的新闻列表")
+
+
+class GenerateSummaryOutput(BaseModel):
+    """生成摘要节点的输出"""
+    summarized_news_list: List[NewsItem] = Field(..., description="生成摘要后的新闻列表")
+
+
 class ExtractKeywordsInput(BaseModel):
     """关键词提取节点的输入"""
     news_list: List[NewsItem] = Field(..., description="需要提取关键词的新闻列表")
@@ -88,7 +99,7 @@ class CreateTableOutput(BaseModel):
 
 class SendEmailInput(BaseModel):
     """发送邮件节点的输入"""
-    email: str = Field(..., description="接收邮件的邮箱地址")
+    emails: List[str] = Field(..., description="接收邮件的邮箱地址列表，支持1-3个邮箱地址")
     news_list: List[NewsItem] = Field(..., description="新闻列表")
     table_filepath: str = Field(..., description="表格文件路径")
     table_filename: str = Field(..., description="表格文件名")
