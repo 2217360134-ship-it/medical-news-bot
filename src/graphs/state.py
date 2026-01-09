@@ -25,9 +25,14 @@ class GlobalState(BaseModel):
     
     # 新闻数据流
     raw_news_list: List[NewsItem] = Field(default=[], description="从今日头条获取的原始新闻列表")
-    summarized_news_list: List[NewsItem] = Field(default=[], description="生成摘要后的新闻列表")
+    deduplicated_news_list: List[NewsItem] = Field(default=[], description="去重后的新闻列表（去除历史重复）")
     filtered_news_list: List[NewsItem] = Field(default=[], description="过滤后的新闻列表（近3个月内）")
+    summarized_news_list: List[NewsItem] = Field(default=[], description="生成摘要后的新闻列表")
     enriched_news_list: List[NewsItem] = Field(default=[], description="提取关键词后的新闻列表")
+    
+    # 历史新闻去重用
+    history_urls: set = Field(default=set(), description="历史新闻URL集合")
+    history_titles: set = Field(default=set(), description="历史新闻标题集合")
     
     # 结果
     synced_count: int = Field(default=0, description="创建的新闻记录数")
@@ -56,6 +61,16 @@ class FetchNewsOutput(BaseModel):
     """新闻获取节点的输出"""
     news_list: List[NewsItem] = Field(..., description="获取到的新闻列表")
     emails_list: List[str] = Field(..., description="分割后的邮箱地址列表")
+
+
+class DeduplicateNewsInput(BaseModel):
+    """新闻去重节点的输入"""
+    news_list: List[NewsItem] = Field(..., description="需要去重的新闻列表")
+
+
+class DeduplicateNewsOutput(BaseModel):
+    """新闻去重节点的输出"""
+    deduplicated_news_list: List[NewsItem] = Field(..., description="去重后的新闻列表（去除历史重复）")
 
 
 class GenerateSummaryInput(BaseModel):
@@ -124,3 +139,14 @@ class MergeNewsInfoInput(BaseModel):
 class MergeNewsInfoOutput(BaseModel):
     """合并新闻信息节点的输出"""
     enriched_news_list: List[NewsItem] = Field(..., description="合并后的完整新闻列表（包含摘要、关键词、source、region）")
+
+
+class SaveNewsHistoryInput(BaseModel):
+    """保存新闻历史记录节点的输入"""
+    enriched_news_list: List[NewsItem] = Field(..., description="需要保存到数据库的新闻列表")
+
+
+class SaveNewsHistoryOutput(BaseModel):
+    """保存新闻历史记录节点的输出"""
+    saved_count: int = Field(..., description="成功保存的新闻记录数")
+    message: str = Field(..., description="保存结果消息")

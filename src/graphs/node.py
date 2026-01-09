@@ -3,12 +3,14 @@ from langgraph.runtime import Runtime
 from coze_coding_utils.runtime_ctx.context import Context
 from graphs.state import (
     FetchNewsInput, FetchNewsOutput,
+    DeduplicateNewsInput, DeduplicateNewsOutput,
     GenerateSummaryInput, GenerateSummaryOutput,
     ExtractDateInput, ExtractDateOutput,
     ExtractKeywordsInput, ExtractKeywordsOutput,
     CreateTableInput, CreateTableOutput,
     SendEmailInput, SendEmailOutput,
     MergeNewsInfoInput, MergeNewsInfoOutput,
+    SaveNewsHistoryInput, SaveNewsHistoryOutput,
     NewsItem
 )
 import os
@@ -154,6 +156,64 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
         raise Exception(f"获取新闻失败: {str(e)}")
 
 
+def deduplicate_news_node(state: DeduplicateNewsInput, config: RunnableConfig, runtime: Runtime[Context]) -> DeduplicateNewsOutput:
+    """
+    title: 去重历史新闻
+    desc: 查询数据库中的历史新闻记录，去除重复的新闻（URL或标题相同的新闻）
+    integrations: 数据库
+    """
+    ctx = runtime.context
+    
+    try:
+        from storage.database.db import get_session
+        from storage.database.news_history_manager import NewsHistoryManager
+        
+        # 获取数据库会话
+        db = get_session()
+        
+        try:
+            # 创建管理器
+            mgr = NewsHistoryManager()
+            
+            # 获取所有历史新闻的URL和标题
+            history_urls = mgr.get_all_urls(db)
+            history_titles = mgr.get_all_titles(db)
+            
+            print(f"历史记录中共有 {len(history_urls)} 个URL，{len(history_titles)} 个标题")
+            
+            # 去重逻辑
+            deduplicated_news = []
+            duplicate_count = 0
+            
+            for news in state.news_list:
+                # 1. 检查URL是否已存在
+                if news.url in history_urls:
+                    duplicate_count += 1
+                    print(f"URL重复，跳过: {news.title}")
+                    continue
+                
+                # 2. 检查标题是否已存在
+                if news.title in history_titles:
+                    duplicate_count += 1
+                    print(f"标题重复，跳过: {news.title}")
+                    continue
+                
+                # 通过去重检查
+                deduplicated_news.append(news)
+            
+            print(f"去重完成: 原始 {len(state.news_list)} 条，去重 {duplicate_count} 条，剩余 {len(deduplicated_news)} 条")
+            
+            return DeduplicateNewsOutput(deduplicated_news_list=deduplicated_news)
+            
+        finally:
+            db.close()
+            
+    except Exception as e:
+        print(f"去重失败: {str(e)}，使用原始新闻列表")
+        # 如果去重失败，返回原始新闻列表（保守处理）
+        return DeduplicateNewsOutput(deduplicated_news_list=state.news_list)
+
+
 def generate_summary_node(state: GenerateSummaryInput, config: RunnableConfig, runtime: Runtime[Context]) -> GenerateSummaryOutput:
     """
     title: 生成新闻摘要
@@ -161,6 +221,11 @@ def generate_summary_node(state: GenerateSummaryInput, config: RunnableConfig, r
     integrations: 大语言模型
     """
     ctx = runtime.context
+    
+    # 检查是否为空列表
+    if not state.filtered_news_list:
+        print("新闻列表为空，跳过摘要生成")
+        return GenerateSummaryOutput(summarized_news_list=[])
     
     # 读取配置文件
     cfg_file = os.path.join(os.getenv("COZE_WORKSPACE_PATH"), config['metadata']['llm_cfg'])
@@ -269,6 +334,11 @@ def extract_date_node(state: ExtractDateInput, config: RunnableConfig, runtime: 
     integrations: 大语言模型
     """
     ctx = runtime.context
+    
+    # 检查是否为空列表
+    if not state.news_list:
+        print("新闻列表为空，跳过日期提取")
+        return ExtractDateOutput(filtered_news_list=[])
     
     # 读取配置文件
     cfg_file = os.path.join(os.getenv("COZE_WORKSPACE_PATH"), config['metadata']['llm_cfg'])
@@ -382,6 +452,11 @@ def extract_keywords_node(state: ExtractKeywordsInput, config: RunnableConfig, r
     """
     ctx = runtime.context
     
+    # 检查是否为空列表
+    if not state.filtered_news_list:
+        print("新闻列表为空，跳过关键词提取")
+        return ExtractKeywordsOutput(enriched_news_list=[])
+    
     # 读取配置文件
     cfg_file = os.path.join(os.getenv("COZE_WORKSPACE_PATH"), config['metadata']['llm_cfg'])
     with open(cfg_file, 'r') as fd:
@@ -482,11 +557,29 @@ def create_table_node(state: CreateTableInput, config: RunnableConfig, runtime: 
         print(f"收到 {len(state.enriched_news_list)} 条新闻")
         if not state.enriched_news_list:
             print("警告：没有新闻需要创建表格")
+            # 创建一个空的表格，包含表头
+            empty_data = {
+                "标题": [],
+                "日期": [],
+                "来源": [],
+                "地区": [],
+                "关键词": [],
+                "链接": [],
+                "摘要": []
+            }
+            df = pd.DataFrame(empty_data)
+            
+            today = datetime.now().strftime("%Y%m%d")
+            filename = f"新闻汇总_{today}.xlsx"
+            filepath = f"/tmp/{filename}"
+            
+            df.to_excel(filepath, index=False, engine='openpyxl')
+            
             return CreateTableOutput(
                 enriched_news_list=[],
                 synced_count=0,
-                table_filepath="",
-                table_filename=""
+                table_filepath=filepath,
+                table_filename=filename
             )
         
         # 准备数据
@@ -743,6 +836,11 @@ def merge_news_info_node(state: MergeNewsInfoInput, config: RunnableConfig, runt
     """
     ctx = runtime.context
     
+    # 检查是否为空列表
+    if not state.summarized_news_list and not state.enriched_news_list:
+        print("新闻列表为空，跳过合并")
+        return MergeNewsInfoOutput(enriched_news_list=[])
+    
     try:
         # 创建一个URL到新闻的映射，方便快速查找
         # 优先使用summarized_news_list中的数据（包含source和region）
@@ -783,3 +881,67 @@ def merge_news_info_node(state: MergeNewsInfoInput, config: RunnableConfig, runt
         
     except Exception as e:
         raise Exception(f"合并新闻信息失败: {str(e)}")
+
+
+def save_news_history_node(state: SaveNewsHistoryInput, config: RunnableConfig, runtime: Runtime[Context]) -> SaveNewsHistoryOutput:
+    """
+    title: 保存新闻历史记录
+    desc: 将已发送的新闻保存到数据库，用于后续去重
+    integrations: 数据库
+    """
+    ctx = runtime.context
+    
+    # 检查是否为空列表
+    if not state.enriched_news_list:
+        print("新闻列表为空，无需保存历史记录")
+        return SaveNewsHistoryOutput(
+            saved_count=0,
+            message="新闻列表为空，无需保存历史记录"
+        )
+    
+    try:
+        from storage.database.db import get_session
+        from storage.database.news_history_manager import NewsHistoryManager, NewsHistoryCreate
+        
+        # 获取数据库会话
+        db = get_session()
+        
+        try:
+            # 创建管理器
+            mgr = NewsHistoryManager()
+            
+            # 准备批量创建的数据
+            news_history_list = []
+            for news in state.enriched_news_list:
+                news_create = NewsHistoryCreate(
+                    title=news.title,
+                    url=news.url,
+                    date=news.date,
+                    source=news.source
+                )
+                news_history_list.append(news_create)
+            
+            # 批量保存到数据库
+            saved_records = mgr.batch_create_news_history(db, news_history_list)
+            
+            saved_count = len(saved_records)
+            print(f"成功保存 {saved_count} 条新闻历史记录")
+            
+            # 清理旧数据（删除180天之前的记录）
+            try:
+                deleted_count = mgr.delete_old_news(db, days=180)
+                if deleted_count > 0:
+                    print(f"清理了 {deleted_count} 条180天前的历史记录")
+            except Exception as e:
+                print(f"清理历史记录失败: {str(e)}")
+            
+            return SaveNewsHistoryOutput(
+                saved_count=saved_count,
+                message=f"成功保存 {saved_count} 条新闻历史记录"
+            )
+            
+        finally:
+            db.close()
+            
+    except Exception as e:
+        raise Exception(f"保存新闻历史记录失败: {str(e)}")
