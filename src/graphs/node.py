@@ -378,32 +378,12 @@ def generate_summary_node(state: GenerateSummaryInput, config: RunnableConfig, r
 def extract_date_node(state: ExtractDateInput, config: RunnableConfig, runtime: Runtime[Context]) -> ExtractDateOutput:
     """
     title: 提取并过滤新闻日期
-    desc: 使用大语言模型提取新闻发布日期，并只保留近3个月内的新闻
-    integrations: 大语言模型
+    desc: 直接使用网络搜索返回的日期字段，只保留近3个月内的新闻
     """
-    ctx = runtime.context
-    
     # 检查是否为空列表
     if not state.news_list:
-        print("新闻列表为空，跳过日期提取")
+        print("新闻列表为空，跳过日期过滤")
         return ExtractDateOutput(filtered_news_list=[])
-    
-    # 读取配置文件
-    cfg_file = os.path.join(os.getenv("COZE_WORKSPACE_PATH"), config['metadata']['llm_cfg'])
-    with open(cfg_file, 'r') as fd:
-        _cfg = json.load(fd)
-    
-    llm_config = _cfg.get("config", {})
-    system_prompt = _cfg.get("sp", "")
-    user_prompt_template = _cfg.get("up", "")
-    
-    # 导入大语言模型调用
-    from langchain_openai import ChatOpenAI
-    from langchain_core.messages import SystemMessage, HumanMessage, BaseMessageChunk
-    from coze_coding_utils.runtime_ctx.context import default_headers
-    
-    api_key = os.getenv("COZE_WORKLOAD_IDENTITY_API_KEY")
-    base_url = os.getenv("COZE_INTEGRATION_MODEL_BASE_URL")
     
     # 计算近3个月的截止日期
     from datetime import timedelta
@@ -414,81 +394,42 @@ def extract_date_node(state: ExtractDateInput, config: RunnableConfig, runtime: 
     print(f"日期过滤截止日期: {cutoff_date_str}")
     
     filtered_news = []
+    no_date_count = 0
+    old_date_count = 0
     
     for news in state.news_list:
         try:
-            # 渲染用户提示词
-            up_tpl = Template(user_prompt_template)
-            user_prompt = up_tpl.render({
-                "title": news.title,
-                "summary": news.summary
-            })
+            # 直接使用已有的日期字段
+            news_date = news.date if news.date else ""
             
-            # 调用大语言模型
-            llm = ChatOpenAI(
-                model=llm_config.get("model", "doubao-seed-1-6-251015"),
-                api_key=api_key,
-                base_url=base_url,
-                streaming=True,
-                extra_body={
-                    "thinking": {
-                        "type": "disabled"
-                    }
-                },
-                temperature=llm_config.get("temperature", 0.3),
-                max_tokens=llm_config.get("max_tokens", 200),
-                default_headers=default_headers(ctx),
-            )
+            # 如果没有日期，使用当前日期（保守处理）
+            if not news_date:
+                news_date = today.strftime('%Y-%m-%d')
+                no_date_count += 1
+                print(f"新闻无日期，使用当前日期: {news.title}")
             
-            messages = [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=user_prompt)
-            ]
-            
-            # 收集流式输出
-            result_text = ""
-            for chunk in llm.stream(messages):
-                if isinstance(chunk.content, str):
-                    result_text += chunk.content
-                elif isinstance(chunk.content, list):
-                    for item in chunk.content:
-                        if isinstance(item, str):
-                            result_text += item
-            
-            # 解析结果 - 尝试提取日期
-            try:
-                import re
-                json_match = re.search(r'\{[^}]*"date"[^}]*\}', result_text)
-                if json_match:
-                    result_json = json.loads(json_match.group())
-                    extracted_date = result_json.get("date", "")
-                else:
-                    # 尝试直接提取日期格式 YYYY-MM-DD
-                    date_match = re.search(r'\d{4}-\d{2}-\d{2}', result_text)
-                    if date_match:
-                        extracted_date = date_match.group()
-                    else:
-                        extracted_date = ""
-            except:
-                extracted_date = ""
-            
-            # 如果提取到日期，更新新闻的日期字段
-            if extracted_date:
-                news.date = extracted_date
-                print(f"提取日期: {news.title} -> {extracted_date}")
+            # 检查日期格式是否为 YYYY-MM-DD
+            import re
+            if not re.match(r'^\d{4}-\d{2}-\d{2}$', news_date):
+                print(f"日期格式无效，跳过: {news.title}, 日期: {news_date}")
+                continue
             
             # 判断日期是否在近3个月内
-            if news.date and news.date >= cutoff_date_str:
+            if news_date >= cutoff_date_str:
+                # 更新新闻的日期字段（确保格式正确）
+                news.date = news_date
                 filtered_news.append(news)
             else:
-                print(f"新闻已过滤（日期过早或无效）: {news.title}, 日期: {news.date}")
+                old_date_count += 1
+                print(f"新闻已过滤（日期过早）: {news.title}, 日期: {news_date}")
             
         except Exception as e:
-            # 如果提取日期失败，保留原新闻（假设是近期的）
-            print(f"提取日期失败: {str(e)}, 保留新闻: {news.title}")
-            filtered_news.append(news)
+            # 如果处理失败，跳过该新闻
+            print(f"处理日期失败: {str(e)}, 跳过新闻: {news.title}")
+            continue
     
-    print(f"日期过滤后剩余 {len(filtered_news)} 条新闻")
+    print(f"日期过滤完成: 原始 {len(state.news_list)} 条，无日期 {no_date_count} 条，过期 {old_date_count} 条，保留 {len(filtered_news)} 条")
+    
     return ExtractDateOutput(filtered_news_list=filtered_news)
 
 
