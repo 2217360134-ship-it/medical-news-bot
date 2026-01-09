@@ -3,7 +3,6 @@ from langgraph.runtime import Runtime
 from coze_coding_utils.runtime_ctx.context import Context
 from graphs.state import (
     FetchNewsInput, FetchNewsOutput,
-    FilterNewsInput, FilterNewsOutput,
     GenerateSummaryInput, GenerateSummaryOutput,
     ExtractKeywordsInput, ExtractKeywordsOutput,
     CreateTableInput, CreateTableOutput,
@@ -39,21 +38,24 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
     # 定义目标新闻来源域名（最多支持5个）
     target_sites = "toutiao.com|sohu.com|people.com.cn|xinhuanet.com|cctv.com"
     
+    # 获取今天的日期，用于搜索最新新闻
+    today_date = datetime.now().strftime('%Y-%m-%d')
+    
     try:
-        # 搜索医疗器械相关新闻（限定来源）
+        # 搜索医疗器械相关新闻（限定来源，添加日期以获取最新新闻）
         web_items1, _, _, _ = web_search(
             ctx=ctx,
-            query="医疗器械",
+            query=f"医疗器械 {today_date}",
             search_type="web",
             count=20,
             need_summary=True,
             sites=target_sites
         )
         
-        # 搜索医美相关新闻（限定来源）
+        # 搜索医美相关新闻（限定来源，添加日期以获取最新新闻）
         web_items2, _, _, _ = web_search(
             ctx=ctx,
-            query="医美",
+            query=f"医美 {today_date}",
             search_type="web",
             count=20,
             need_summary=True,
@@ -114,68 +116,6 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
         
     except Exception as e:
         raise Exception(f"获取新闻失败: {str(e)}")
-
-
-def filter_news_node(state: FilterNewsInput, config: RunnableConfig, runtime: Runtime[Context]) -> FilterNewsOutput:
-    """
-    title: 筛选相关新闻
-    desc: 根据关键词筛选医疗器械和医美相关的新闻
-    """
-    ctx = runtime.context
-    
-    # 定义医疗器械和医美相关关键词（更精确）
-    medical_keywords = [
-        # 医疗器械设备
-        '医疗器械', '医疗设备', '手术器械', '诊断设备', '治疗设备',
-        '医疗影像', '监护设备', '呼吸机', '心电', '超声', 'CT', 'MRI',
-        # 医美相关
-        '医美', '医疗美容', '整形', '美容注射', '激光美容', '抗衰老',
-        '植发', '隆鼻', '隆胸', '吸脂', '微整', '皮肤管理',
-        # 公司和技术相关
-        '迈瑞医疗', '联影医疗', '微创医疗', '威高集团', '乐普医疗',
-        '骨科植入', '介入治疗', '体外诊断', 'IVD', '耗材',
-        # 融资相关
-        '融资', '上市', 'IPO', '投资', '并购', '收购',
-        '医疗器械融资', '医美融资', '估值'
-    ]
-    
-    # 排除关键词（不包含这些内容的新闻将被排除）
-    exclude_keywords = [
-        '美容护肤', '化妆品', '面膜', '护肤品', '洗发水',
-        '美妆', '彩妆', '日常护理', '生活美容',
-        '广告', '促销', '优惠', '打折', '活动',
-        '双十一', '618', '购物', '电商'
-    ]
-    
-    filtered_news = []
-    
-    for news in state.news_list:
-        # 检查标题和摘要是否包含相关关键词
-        title_lower = news.title.lower()
-        summary_lower = news.summary.lower()
-        
-        # 检查是否包含排除关键词（如果包含，直接跳过）
-        is_excluded = False
-        for exclude_keyword in exclude_keywords:
-            if exclude_keyword.lower() in title_lower or exclude_keyword.lower() in summary_lower:
-                is_excluded = True
-                break
-        
-        if is_excluded:
-            continue
-        
-        # 检查是否包含医疗器械相关关键词
-        is_related = False
-        for keyword in medical_keywords:
-            if keyword.lower() in title_lower or keyword.lower() in summary_lower:
-                is_related = True
-                break
-        
-        # 只保留相关的新闻
-        if is_related:
-            filtered_news.append(news)
-    
-    return FilterNewsOutput(filtered_news_list=filtered_news)
 
 
 def generate_summary_node(state: GenerateSummaryInput, config: RunnableConfig, runtime: Runtime[Context]) -> GenerateSummaryOutput:
@@ -246,20 +186,36 @@ def generate_summary_node(state: GenerateSummaryInput, config: RunnableConfig, r
                         if isinstance(item, str):
                             result_text += item
             
-            # 解析结果 - 尝试提取JSON格式的摘要
+            # 解析结果 - 尝试提取JSON格式的摘要、来源和地区
             try:
                 import re
-                json_match = re.search(r'\{[^}]*"summary"[^}]*\}', result_text)
+                json_match = re.search(r'\{[^}]*"summary"[^}]*"source"[^}]*"region"[^}]*\}', result_text)
                 if json_match:
                     result_json = json.loads(json_match.group())
                     summary = result_json.get("summary", result_text)
+                    source = result_json.get("source", "")
+                    region = result_json.get("region", "")
                 else:
-                    summary = result_text.strip()
+                    # 尝试只匹配summary字段
+                    json_match = re.search(r'\{[^}]*"summary"[^}]*\}', result_text)
+                    if json_match:
+                        result_json = json.loads(json_match.group())
+                        summary = result_json.get("summary", result_text)
+                        source = ""
+                        region = ""
+                    else:
+                        summary = result_text.strip()
+                        source = ""
+                        region = ""
             except:
                 summary = result_text.strip()
+                source = ""
+                region = ""
             
-            # 更新新闻项的摘要
+            # 更新新闻项的摘要、来源和地区
             news.summary = summary
+            news.source = source
+            news.region = region
             summarized_news.append(news)
             
         except Exception as e:
@@ -392,6 +348,8 @@ def create_table_node(state: CreateTableInput, config: RunnableConfig, runtime: 
             table_data.append({
                 "标题": news.title,
                 "日期": news.date,
+                "来源": news.source,
+                "地区": news.region,
                 "关键词": keywords_str,
                 "链接": news.url,
                 "摘要": news.summary
@@ -511,11 +469,15 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
         # 添加每条新闻
         for idx, news in enumerate(state.news_list, 1):
             keywords_str = ", ".join(news.keywords) if news.keywords else "无"
+            source_str = news.source if news.source else "未知"
+            region_str = news.region if news.region else "-"
             html_content += f"""
                 <div class="news-item">
                     <div class="news-title">{idx}. {news.title}</div>
                     <div class="news-meta">
-                        <strong>日期:</strong> {news.date} | 
+                        <strong>日期:</strong> {news.date} |
+                        <strong>来源:</strong> {source_str} |
+                        <strong>地区:</strong> {region_str} |
                         <strong>关键词:</strong> <span class="news-keywords">{keywords_str}</span>
                     </div>
                     <div class="news-summary">

@@ -8,6 +8,8 @@ class NewsItem(BaseModel):
     date: str = Field(..., description="新闻发布日期")
     url: str = Field(..., description="新闻链接")
     summary: str = Field(..., description="新闻摘要")
+    source: str = Field(default="", description="新闻来源")
+    region: str = Field(default="", description="地区")
     keywords: List[str] = Field(default=[], description="关键词列表")
 
 
@@ -23,7 +25,6 @@ class GlobalState(BaseModel):
     
     # 新闻数据流
     raw_news_list: List[NewsItem] = Field(default=[], description="从今日头条获取的原始新闻列表")
-    filtered_news_list: List[NewsItem] = Field(default=[], description="筛选后的医疗器械和医美相关新闻")
     summarized_news_list: List[NewsItem] = Field(default=[], description="生成摘要后的新闻列表")
     enriched_news_list: List[NewsItem] = Field(default=[], description="提取关键词后的新闻列表")
     
@@ -54,16 +55,6 @@ class FetchNewsOutput(BaseModel):
     """新闻获取节点的输出"""
     news_list: List[NewsItem] = Field(..., description="获取到的新闻列表")
     emails_list: List[str] = Field(..., description="分割后的邮箱地址列表")
-
-
-class FilterNewsInput(BaseModel):
-    """新闻筛选节点的输入"""
-    news_list: List[NewsItem] = Field(..., description="待筛选的新闻列表")
-
-
-class FilterNewsOutput(BaseModel):
-    """新闻筛选节点的输出"""
-    filtered_news_list: List[NewsItem] = Field(..., description="筛选后的新闻列表")
 
 
 class GenerateSummaryInput(BaseModel):
