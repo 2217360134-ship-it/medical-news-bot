@@ -48,9 +48,8 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
     
     news_list = []
     
-    # 从输入中获取目标新闻来源域名（最多支持5个）
-    target_sites = state.target_sites or "toutiao.com|sohu.com|qq.com|163.com|ifeng.com"
-    print(f"使用目标网站: {target_sites}")
+    # 定义目标新闻来源域名（最多支持5个）
+    target_sites = "toutiao.com|sohu.com|qq.com|163.com|ifeng.com"
     
     # 构建核心搜索词列表（确保获取的新闻主体内容与医疗器械、医美相关）
     medical_device_queries = [

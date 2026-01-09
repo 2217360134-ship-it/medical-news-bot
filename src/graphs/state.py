@@ -20,9 +20,6 @@ class GlobalState(BaseModel):
     emails: str = Field(default="", description="接收邮件的邮箱地址，多个邮箱用逗号分隔")
     emails_list: List[str] = Field(default=[], description="分割后的邮箱地址列表")
     
-    # 目标网站配置
-    target_sites: str = Field(default="toutiao.com|sohu.com|qq.com|163.com|ifeng.com", description="目标新闻来源网站域名")
-    
     # 表格文件信息
     table_filepath: str = Field(default="", description="Excel表格文件路径")
     table_filename: str = Field(default="", description="Excel表格文件名")
@@ -47,7 +44,6 @@ class GlobalState(BaseModel):
 class GraphInput(BaseModel):
     """工作流的输入"""
     emails: str = Field(..., description="接收邮件的邮箱地址，多个邮箱用逗号分隔，例如：user1@example.com,user2@example.com")
-    target_sites: str = Field(default="toutiao.com|sohu.com|qq.com|163.com|ifeng.com", description="目标新闻来源网站域名，多个域名用|分隔，最多5个，例如：toutiao.com|sohu.com")
 
 
 class GraphOutput(BaseModel):
@@ -69,7 +65,7 @@ class SplitEmailsOutput(BaseModel):
 
 class FetchNewsInput(BaseModel):
     """新闻获取节点的输入"""
-    target_sites: str = Field(default="toutiao.com|sohu.com|qq.com|163.com|ifeng.com", description="目标新闻来源网站域名")
+    pass
 
 
 class FetchNewsOutput(BaseModel):
