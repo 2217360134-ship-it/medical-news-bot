@@ -13,8 +13,9 @@ class NewsItem(BaseModel):
 
 class GlobalState(BaseModel):
     """全局状态定义"""
-    # 邮件信息（支持最多3个邮箱地址，至少1个必填）
-    emails: List[str] = Field(..., description="接收邮件的邮箱地址列表，支持1-3个邮箱地址")
+    # 邮件信息（输入为字符串，处理为列表）
+    emails: str = Field(default="", description="接收邮件的邮箱地址，多个邮箱用逗号分隔")
+    emails_list: List[str] = Field(default=[], description="分割后的邮箱地址列表")
     
     # 表格文件信息
     table_filepath: str = Field(default="", description="Excel表格文件路径")
@@ -34,7 +35,7 @@ class GlobalState(BaseModel):
 
 class GraphInput(BaseModel):
     """工作流的输入"""
-    emails: List[str] = Field(..., description="接收邮件的邮箱地址列表，支持1-3个邮箱地址，至少1个必填")
+    emails: str = Field(..., description="接收邮件的邮箱地址，多个邮箱用逗号分隔，例如：user1@example.com,user2@example.com")
 
 
 class GraphOutput(BaseModel):
@@ -46,12 +47,13 @@ class GraphOutput(BaseModel):
 
 class FetchNewsInput(BaseModel):
     """新闻获取节点的输入"""
-    pass
+    emails: str = Field(..., description="接收邮件的邮箱地址，多个邮箱用逗号分隔")
 
 
 class FetchNewsOutput(BaseModel):
     """新闻获取节点的输出"""
     news_list: List[NewsItem] = Field(..., description="获取到的新闻列表")
+    emails_list: List[str] = Field(..., description="分割后的邮箱地址列表")
 
 
 class FilterNewsInput(BaseModel):
@@ -99,7 +101,7 @@ class CreateTableOutput(BaseModel):
 
 class SendEmailInput(BaseModel):
     """发送邮件节点的输入"""
-    emails: List[str] = Field(..., description="接收邮件的邮箱地址列表，支持1-3个邮箱地址")
+    emails_list: List[str] = Field(..., description="分割后的邮箱地址列表")
     news_list: List[NewsItem] = Field(..., description="新闻列表")
     table_filepath: str = Field(..., description="表格文件路径")
     table_filename: str = Field(..., description="表格文件名")

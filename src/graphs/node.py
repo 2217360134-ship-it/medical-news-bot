@@ -25,6 +25,12 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
     """
     ctx = runtime.context
     
+    # 将emails字符串分割成列表（支持逗号、分号、空格分隔）
+    emails_str = state.emails or ""
+    emails_list = [email.strip() for email in emails_str.replace(';', ',').replace(' ', ',').split(',') if email.strip()]
+    
+    print(f"分割后的邮箱列表: {emails_list}")
+    
     # 导入网络搜索函数
     from tools.web_search_tool import web_search
     
@@ -104,7 +110,7 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
                 seen_titles.add(normalized_title)
                 final_news.append(news)
         
-        return FetchNewsOutput(news_list=final_news)
+        return FetchNewsOutput(news_list=final_news, emails_list=emails_list)
         
     except Exception as e:
         raise Exception(f"获取新闻失败: {str(e)}")
@@ -534,7 +540,7 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
         # 创建多部分邮件
         msg = MIMEMultipart()
         msg["From"] = formataddr(("新闻收集助手", email_config["account"]))
-        msg["To"] = ", ".join(state.emails)  # 支持多个收件人
+        msg["To"] = ", ".join(state.emails_list)  # 支持多个收件人
         msg["Subject"] = Header(f"医疗器械医美新闻汇总 - {today}", 'utf-8')
         msg["Date"] = formatdate(localtime=True)
         msg["Message-ID"] = make_msgid()
@@ -567,12 +573,12 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
             server.ehlo()
             server.login(email_config["account"], email_config["auth_code"])
             # 发送给所有收件人
-            server.sendmail(email_config["account"], state.emails, msg.as_string())
+            server.sendmail(email_config["account"], state.emails_list, msg.as_string())
             server.quit()
         
         return SendEmailOutput(
             email_sent=True,
-            email_message=f"邮件已成功发送到 {', '.join(state.emails)}，包含 {len(state.news_list)} 条新闻及Excel附件"
+            email_message=f"邮件已成功发送到 {', '.join(state.emails_list)}，包含 {len(state.news_list)} 条新闻及Excel附件"
         )
         
     except smtplib.SMTPAuthenticationError as e:
