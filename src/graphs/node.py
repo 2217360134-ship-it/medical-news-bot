@@ -203,6 +203,10 @@ def deduplicate_news_node(state: DeduplicateNewsInput, config: RunnableConfig, r
             
             print(f"去重完成: 原始 {len(state.news_list)} 条，去重 {duplicate_count} 条，剩余 {len(deduplicated_news)} 条")
             
+            # 如果去重后没有新闻，打印警告
+            if not deduplicated_news:
+                print("警告: 去重后没有剩余的新闻！")
+            
             return DeduplicateNewsOutput(deduplicated_news_list=deduplicated_news)
             
         finally:
@@ -290,25 +294,43 @@ def generate_summary_node(state: GenerateSummaryInput, config: RunnableConfig, r
             # 解析结果 - 尝试提取JSON格式的摘要、来源和地区
             try:
                 import re
-                json_match = re.search(r'\{[^}]*"summary"[^}]*"source"[^}]*"region"[^}]*\}', result_text)
-                if json_match:
-                    result_json = json.loads(json_match.group())
+                
+                # 方法1: 尝试直接解析整个文本为JSON
+                result_json = None
+                try:
+                    result_json = json.loads(result_text.strip())
+                except:
+                    pass
+                
+                # 方法2: 如果直接解析失败，使用正则表达式提取JSON对象
+                if not result_json:
+                    # 查找第一个完整的JSON对象（支持跨行）
+                    json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', result_text, re.DOTALL)
+                    if json_match:
+                        try:
+                            result_json = json.loads(json_match.group())
+                        except:
+                            pass
+                
+                # 方法3: 尝试匹配简化的JSON（单行，无嵌套）
+                if not result_json:
+                    json_match = re.search(r'\{[^}]*"summary"[^}]*"source"[^}]*"region"[^}]*\}', result_text)
+                    if json_match:
+                        result_json = json.loads(json_match.group())
+                
+                # 提取字段
+                if result_json and isinstance(result_json, dict):
                     summary = result_json.get("summary", result_text)
                     source = result_json.get("source", "")
                     region = result_json.get("region", "")
                 else:
-                    # 尝试只匹配summary字段
-                    json_match = re.search(r'\{[^}]*"summary"[^}]*\}', result_text)
-                    if json_match:
-                        result_json = json.loads(json_match.group())
-                        summary = result_json.get("summary", result_text)
-                        source = ""
-                        region = ""
-                    else:
-                        summary = result_text.strip()
-                        source = ""
-                        region = ""
-            except:
+                    # 所有方法都失败，使用整个文本作为摘要
+                    summary = result_text.strip()
+                    source = ""
+                    region = ""
+                    
+            except Exception as e:
+                print(f"解析JSON失败: {str(e)}, 使用原始文本")
                 summary = result_text.strip()
                 source = ""
                 region = ""
@@ -516,17 +538,50 @@ def extract_keywords_node(state: ExtractKeywordsInput, config: RunnableConfig, r
                         if isinstance(item, str):
                             result_text += item
             
-            # 解析结果
-            # 尝试解析JSON
+            # 解析结果 - 尝试提取JSON格式的关键词
             try:
                 import re
-                json_match = re.search(r'\{[^}]*"keywords"[^}]*\}', result_text)
-                if json_match:
-                    result_json = json.loads(json_match.group())
+                
+                # 方法1: 尝试直接解析整个文本为JSON
+                result_json = None
+                try:
+                    result_json = json.loads(result_text.strip())
+                except:
+                    pass
+                
+                # 方法2: 如果直接解析失败，使用正则表达式提取JSON对象
+                if not result_json:
+                    # 查找第一个完整的JSON对象（支持跨行）
+                    json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', result_text, re.DOTALL)
+                    if json_match:
+                        try:
+                            result_json = json.loads(json_match.group())
+                        except:
+                            pass
+                
+                # 方法3: 尝试匹配简化的JSON（单行，无嵌套）
+                if not result_json:
+                    json_match = re.search(r'\{[^}]*"keywords"[^}]*\}', result_text)
+                    if json_match:
+                        result_json = json.loads(json_match.group())
+                
+                # 提取keywords字段
+                if result_json and isinstance(result_json, dict):
                     keywords = result_json.get("keywords", [])
+                    if isinstance(keywords, list):
+                        # 确保keywords是列表
+                        pass
+                    elif isinstance(keywords, str):
+                        # 如果是字符串，尝试分割
+                        keywords = [k.strip() for k in keywords.split(',') if k.strip()]
+                    else:
+                        keywords = []
                 else:
-                    keywords = []
-            except:
+                    # 所有方法都失败，尝试从文本中提取关键词
+                    keywords = [kw.strip() for kw in result_text.split('，') if kw.strip()][:5]
+                    
+            except Exception as e:
+                print(f"解析关键词JSON失败: {str(e)}, 尝试文本提取")
                 # 如果JSON解析失败，尝试从文本中提取关键词
                 keywords = [kw.strip() for kw in result_text.split('，') if kw.strip()][:5]
             
