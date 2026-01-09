@@ -26,6 +26,7 @@ class GlobalState(BaseModel):
     # 新闻数据流
     raw_news_list: List[NewsItem] = Field(default=[], description="从今日头条获取的原始新闻列表")
     summarized_news_list: List[NewsItem] = Field(default=[], description="生成摘要后的新闻列表")
+    filtered_news_list: List[NewsItem] = Field(default=[], description="过滤后的新闻列表（近3个月内）")
     enriched_news_list: List[NewsItem] = Field(default=[], description="提取关键词后的新闻列表")
     
     # 结果
@@ -65,6 +66,16 @@ class GenerateSummaryInput(BaseModel):
 class GenerateSummaryOutput(BaseModel):
     """生成摘要节点的输出"""
     summarized_news_list: List[NewsItem] = Field(..., description="生成摘要后的新闻列表")
+
+
+class ExtractDateInput(BaseModel):
+    """日期提取节点的输入"""
+    news_list: List[NewsItem] = Field(..., description="需要提取日期的新闻列表")
+
+
+class ExtractDateOutput(BaseModel):
+    """日期提取节点的输出"""
+    filtered_news_list: List[NewsItem] = Field(..., description="过滤后的新闻列表（近3个月内）")
 
 
 class ExtractKeywordsInput(BaseModel):

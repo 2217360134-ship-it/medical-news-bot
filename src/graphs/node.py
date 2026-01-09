@@ -4,6 +4,7 @@ from coze_coding_utils.runtime_ctx.context import Context
 from graphs.state import (
     FetchNewsInput, FetchNewsOutput,
     GenerateSummaryInput, GenerateSummaryOutput,
+    ExtractDateInput, ExtractDateOutput,
     ExtractKeywordsInput, ExtractKeywordsOutput,
     CreateTableInput, CreateTableOutput,
     SendEmailInput, SendEmailOutput,
@@ -38,32 +39,66 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
     # 定义目标新闻来源域名（最多支持5个）
     target_sites = "toutiao.com|sohu.com|people.com.cn|xinhuanet.com|cctv.com"
     
-    # 获取今天的日期，用于搜索最新新闻
-    today_date = datetime.now().strftime('%Y-%m-%d')
+    # 构建核心搜索词列表（确保获取的新闻主体内容与医疗器械、医美相关）
+    medical_device_queries = [
+        "医疗器械公司",
+        "医疗器械产品",
+        "医疗器械技术",
+        "医疗设备",
+        "诊断设备",
+        "IVD 体外诊断",
+        "医疗器械融资",
+        "医疗器械上市"
+    ]
+    
+    medical_beauty_queries = [
+        "医美公司",
+        "医美产品",
+        "医美技术",
+        "激光美容",
+        "整形美容",
+        "微整形",
+        "医美融资",
+        "医美上市"
+    ]
     
     try:
-        # 搜索医疗器械相关新闻（限定来源，添加日期以获取最新新闻）
-        web_items1, _, _, _ = web_search(
-            ctx=ctx,
-            query=f"医疗器械 {today_date}",
-            search_type="web",
-            count=20,
-            need_summary=True,
-            sites=target_sites
-        )
+        # 并行搜索所有医疗器械相关查询
+        all_web_items = []
         
-        # 搜索医美相关新闻（限定来源，添加日期以获取最新新闻）
-        web_items2, _, _, _ = web_search(
-            ctx=ctx,
-            query=f"医美 {today_date}",
-            search_type="web",
-            count=20,
-            need_summary=True,
-            sites=target_sites
-        )
+        for query in medical_device_queries:
+            try:
+                web_items, _, _, _ = web_search(
+                    ctx=ctx,
+                    query=query,
+                    search_type="web",
+                    count=10,
+                    need_summary=True,
+                    sites=target_sites
+                )
+                all_web_items.extend(web_items)
+                print(f"搜索 '{query}' 获取到 {len(web_items)} 条新闻")
+            except Exception as e:
+                print(f"搜索 '{query}' 失败: {str(e)}")
+                continue
         
-        # 合并搜索结果
-        all_web_items = web_items1 + web_items2
+        for query in medical_beauty_queries:
+            try:
+                web_items, _, _, _ = web_search(
+                    ctx=ctx,
+                    query=query,
+                    search_type="web",
+                    count=10,
+                    need_summary=True,
+                    sites=target_sites
+                )
+                all_web_items.extend(web_items)
+                print(f"搜索 '{query}' 获取到 {len(web_items)} 条新闻")
+            except Exception as e:
+                print(f"搜索 '{query}' 失败: {str(e)}")
+                continue
+        
+        print(f"总共获取到 {len(all_web_items)} 条原始新闻")
         
         # 转换为NewsItem格式
         for item in all_web_items:
@@ -224,6 +259,118 @@ def generate_summary_node(state: GenerateSummaryInput, config: RunnableConfig, r
             summarized_news.append(news)
     
     return GenerateSummaryOutput(summarized_news_list=summarized_news)
+
+
+def extract_date_node(state: ExtractDateInput, config: RunnableConfig, runtime: Runtime[Context]) -> ExtractDateOutput:
+    """
+    title: 提取并过滤新闻日期
+    desc: 使用大语言模型提取新闻发布日期，并只保留近3个月内的新闻
+    integrations: 大语言模型
+    """
+    ctx = runtime.context
+    
+    # 读取配置文件
+    cfg_file = os.path.join(os.getenv("COZE_WORKSPACE_PATH"), config['metadata']['llm_cfg'])
+    with open(cfg_file, 'r') as fd:
+        _cfg = json.load(fd)
+    
+    llm_config = _cfg.get("config", {})
+    system_prompt = _cfg.get("sp", "")
+    user_prompt_template = _cfg.get("up", "")
+    
+    # 导入大语言模型调用
+    from langchain_openai import ChatOpenAI
+    from langchain_core.messages import SystemMessage, HumanMessage, BaseMessageChunk
+    from coze_coding_utils.runtime_ctx.context import default_headers
+    
+    api_key = os.getenv("COZE_WORKLOAD_IDENTITY_API_KEY")
+    base_url = os.getenv("COZE_INTEGRATION_MODEL_BASE_URL")
+    
+    # 计算近3个月的截止日期
+    from datetime import timedelta
+    today = datetime.now()
+    three_months_ago = today - timedelta(days=90)
+    cutoff_date_str = three_months_ago.strftime('%Y-%m-%d')
+    
+    print(f"日期过滤截止日期: {cutoff_date_str}")
+    
+    filtered_news = []
+    
+    for news in state.news_list:
+        try:
+            # 渲染用户提示词
+            up_tpl = Template(user_prompt_template)
+            user_prompt = up_tpl.render({
+                "title": news.title,
+                "summary": news.summary
+            })
+            
+            # 调用大语言模型
+            llm = ChatOpenAI(
+                model=llm_config.get("model", "doubao-seed-1-6-251015"),
+                api_key=api_key,
+                base_url=base_url,
+                streaming=True,
+                extra_body={
+                    "thinking": {
+                        "type": "disabled"
+                    }
+                },
+                temperature=llm_config.get("temperature", 0.3),
+                max_tokens=llm_config.get("max_tokens", 200),
+                default_headers=default_headers(ctx),
+            )
+            
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt)
+            ]
+            
+            # 收集流式输出
+            result_text = ""
+            for chunk in llm.stream(messages):
+                if isinstance(chunk.content, str):
+                    result_text += chunk.content
+                elif isinstance(chunk.content, list):
+                    for item in chunk.content:
+                        if isinstance(item, str):
+                            result_text += item
+            
+            # 解析结果 - 尝试提取日期
+            try:
+                import re
+                json_match = re.search(r'\{[^}]*"date"[^}]*\}', result_text)
+                if json_match:
+                    result_json = json.loads(json_match.group())
+                    extracted_date = result_json.get("date", "")
+                else:
+                    # 尝试直接提取日期格式 YYYY-MM-DD
+                    date_match = re.search(r'\d{4}-\d{2}-\d{2}', result_text)
+                    if date_match:
+                        extracted_date = date_match.group()
+                    else:
+                        extracted_date = ""
+            except:
+                extracted_date = ""
+            
+            # 如果提取到日期，更新新闻的日期字段
+            if extracted_date:
+                news.date = extracted_date
+                print(f"提取日期: {news.title} -> {extracted_date}")
+            
+            # 判断日期是否在近3个月内
+            if news.date and news.date >= cutoff_date_str:
+                filtered_news.append(news)
+            else:
+                print(f"新闻已过滤（日期过早或无效）: {news.title}, 日期: {news.date}")
+            
+        except Exception as e:
+            # 如果提取日期失败，保留原新闻（假设是近期的）
+            print(f"提取日期失败: {str(e)}, 保留新闻: {news.title}")
+            filtered_news.append(news)
+    
+    print(f"日期过滤后剩余 {len(filtered_news)} 条新闻")
+    return ExtractDateOutput(filtered_news_list=filtered_news)
 
 
 def extract_keywords_node(state: ExtractKeywordsInput, config: RunnableConfig, runtime: Runtime[Context]) -> ExtractKeywordsOutput:
@@ -491,7 +638,7 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
         
         html_content += f"""
                 <div class="footer">
-                    <p>此邮件由新闻收集工作流自动发送</p>
+                    <p>此邮件由新闻收集助手自动发送</p>
                     <p>如有问题，请联系管理员</p>
                 </div>
             </div>
@@ -499,49 +646,77 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
         </html>
         """
         
-        # 创建多部分邮件
-        msg = MIMEMultipart()
-        msg["From"] = formataddr(("新闻收集助手", email_config["account"]))
-        msg["To"] = ", ".join(state.emails_list)  # 支持多个收件人
-        msg["Subject"] = Header(f"医疗器械医美新闻汇总 - {today}", 'utf-8')
-        msg["Date"] = formatdate(localtime=True)
-        msg["Message-ID"] = make_msgid()
+        # 分别发送给每个收件人
+        success_count = 0
+        failed_emails = []
         
-        # 添加HTML正文
-        msg.attach(MIMEText(html_content, 'html', 'utf-8'))
-        
-        # 添加Excel附件
+        # 读取Excel文件内容（用于每个邮件）
         with open(state.table_filepath, 'rb') as f:
-            part = MIMEBase('application', 'octet-stream')
-            part.set_payload(f.read())
+            file_content = f.read()
         
-        encoders.encode_base64(part)
-        part.add_header(
-            'Content-Disposition',
-            f'attachment; filename="{Header(state.table_filename, 'utf-8').encode()}'
-        )
-        msg.attach(part)
+        # 为每个收件人单独发送邮件
+        for recipient_email in state.emails_list:
+            try:
+                # 创建多部分邮件
+                msg = MIMEMultipart()
+                msg["From"] = formataddr(("新闻收集助手", email_config["account"]))
+                msg["To"] = recipient_email  # 只显示一个收件地址
+                msg["Subject"] = Header(f"医疗器械医美新闻汇总 - {today}", 'utf-8')
+                msg["Date"] = formatdate(localtime=True)
+                msg["Message-ID"] = make_msgid()
+                
+                # 添加HTML正文
+                msg.attach(MIMEText(html_content, 'html', 'utf-8'))
+                
+                # 添加Excel附件
+                part = MIMEBase('application', 'octet-stream')
+                part.set_payload(file_content)
+                
+                encoders.encode_base64(part)
+                part.add_header(
+                    'Content-Disposition',
+                    f'attachment; filename="{Header(state.table_filename, "utf-8").encode()}'
+                )
+                msg.attach(part)
+                
+                # 发送邮件
+                ctx_ssl = ssl.create_default_context()
+                ctx_ssl.minimum_version = ssl.TLSVersion.TLSv1_2
+                
+                with smtplib.SMTP_SSL(
+                    email_config["smtp_server"],
+                    email_config["smtp_port"],
+                    context=ctx_ssl,
+                    timeout=30
+                ) as server:
+                    server.ehlo()
+                    server.login(email_config["account"], email_config["auth_code"])
+                    # 只发送给当前收件人
+                    server.sendmail(email_config["account"], [recipient_email], msg.as_string())
+                    server.quit()
+                
+                success_count += 1
+                print(f"邮件已成功发送到: {recipient_email}")
+                
+            except Exception as e:
+                print(f"发送到 {recipient_email} 失败: {str(e)}")
+                failed_emails.append(f"{recipient_email}: {str(e)}")
         
-        # 发送邮件
-        ctx_ssl = ssl.create_default_context()
-        ctx_ssl.minimum_version = ssl.TLSVersion.TLSv1_2
-        
-        with smtplib.SMTP_SSL(
-            email_config["smtp_server"],
-            email_config["smtp_port"],
-            context=ctx_ssl,
-            timeout=30
-        ) as server:
-            server.ehlo()
-            server.login(email_config["account"], email_config["auth_code"])
-            # 发送给所有收件人
-            server.sendmail(email_config["account"], state.emails_list, msg.as_string())
-            server.quit()
-        
-        return SendEmailOutput(
-            email_sent=True,
-            email_message=f"邮件已成功发送到 {', '.join(state.emails_list)}，包含 {len(state.news_list)} 条新闻及Excel附件"
-        )
+        # 返回发送结果
+        if success_count > 0:
+            if failed_emails:
+                message = f"邮件已成功发送到 {success_count} 个收件人。失败的邮箱: {', '.join(failed_emails)}"
+            else:
+                message = f"邮件已成功发送到所有 {success_count} 个收件人，包含 {len(state.news_list)} 条新闻及Excel附件"
+            return SendEmailOutput(
+                email_sent=True,
+                email_message=message
+            )
+        else:
+            return SendEmailOutput(
+                email_sent=False,
+                email_message=f"邮件发送失败: {', '.join(failed_emails)}"
+            )
         
     except smtplib.SMTPAuthenticationError as e:
         return SendEmailOutput(
