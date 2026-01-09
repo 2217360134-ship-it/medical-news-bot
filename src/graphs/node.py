@@ -68,6 +68,10 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
     try:
         # 并行搜索所有医疗器械相关查询
         all_web_items = []
+        search_success_count = 0
+        search_fail_count = 0
+        
+        print(f"开始搜索新闻，目标网站: {target_sites}")
         
         for query in medical_device_queries:
             try:
@@ -80,9 +84,11 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
                     sites=target_sites
                 )
                 all_web_items.extend(web_items)
-                print(f"搜索 '{query}' 获取到 {len(web_items)} 条新闻")
+                search_success_count += 1
+                print(f"[成功] 搜索 '{query}' 获取到 {len(web_items)} 条新闻")
             except Exception as e:
-                print(f"搜索 '{query}' 失败: {str(e)}")
+                search_fail_count += 1
+                print(f"[失败] 搜索 '{query}' 失败: {str(e)}")
                 continue
         
         for query in medical_beauty_queries:
@@ -96,12 +102,23 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
                     sites=target_sites
                 )
                 all_web_items.extend(web_items)
-                print(f"搜索 '{query}' 获取到 {len(web_items)} 条新闻")
+                search_success_count += 1
+                print(f"[成功] 搜索 '{query}' 获取到 {len(web_items)} 条新闻")
             except Exception as e:
-                print(f"搜索 '{query}' 失败: {str(e)}")
+                search_fail_count += 1
+                print(f"[失败] 搜索 '{query}' 失败: {str(e)}")
                 continue
         
+        print(f"搜索完成: 成功 {search_success_count} 个查询，失败 {search_fail_count} 个查询")
         print(f"总共获取到 {len(all_web_items)} 条原始新闻")
+        
+        # 如果没有获取到任何新闻，打印警告
+        if not all_web_items:
+            print("⚠️ 警告: 所有搜索查询都没有获取到新闻！")
+            print("可能的原因:")
+            print("  1. 网络搜索服务暂时不可用")
+            print("  2. 目标网站没有相关新闻")
+            print("  3. 搜索词需要调整")
         
         # 转换为NewsItem格式
         for item in all_web_items:
@@ -705,15 +722,24 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
         email_credential = client.get_integration_credential("integration-email-imap-smtp")
         email_config = json.loads(email_credential)
         
+        print(f"邮件配置: {email_config.get('account')}")
+        print(f"收件人列表: {state.emails_list}")
+        print(f"新闻数量: {len(state.enriched_news_list)}")
+        
         # 检查是否有新闻数据
         if not state.enriched_news_list:
+            print("❌ 不发送邮件: 新闻列表为空")
             return SendEmailOutput(
                 email_sent=False,
                 email_message="没有新闻需要发送"
             )
         
         # 检查表格文件是否存在
+        print(f"表格文件路径: {state.table_filepath}")
+        print(f"表格文件存在: {os.path.exists(state.table_filepath) if state.table_filepath else False}")
+        
         if not state.table_filepath or not os.path.exists(state.table_filepath):
+            print("❌ 不发送邮件: 表格文件不存在")
             return SendEmailOutput(
                 email_sent=False,
                 email_message=f"表格文件不存在: {state.table_filepath}"
