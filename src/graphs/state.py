@@ -30,9 +30,9 @@ class GlobalState(BaseModel):
     summarized_news_list: List[NewsItem] = Field(default=[], description="生成摘要后的新闻列表")
     enriched_news_list: List[NewsItem] = Field(default=[], description="提取关键词后的新闻列表")
     
-    # 历史新闻去重用
-    history_urls: set = Field(default=set(), description="历史新闻URL集合")
-    history_titles: set = Field(default=set(), description="历史新闻标题集合")
+    # 历史新闻去重用（注意：在节点中直接使用set类型，不在State中定义）
+    # history_urls: set = Field(default=set(), description="历史新闻URL集合")
+    # history_titles: set = Field(default=set(), description="历史新闻标题集合")
     
     # 结果
     synced_count: int = Field(default=0, description="创建的新闻记录数")

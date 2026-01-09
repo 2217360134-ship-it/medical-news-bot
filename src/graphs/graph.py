@@ -19,16 +19,16 @@ from graphs.node import (
 # 创建状态图, 一定指定工作流的入参和出参
 builder = StateGraph(GlobalState, input_schema=GraphInput, output_schema=GraphOutput)
 
-# 添加节点
-builder.add_node("fetch_news", fetch_news_node)
-builder.add_node("deduplicate_news", deduplicate_news_node)
+# 添加节点（为所有节点添加metadata以便预览正确显示）
+builder.add_node("fetch_news", fetch_news_node, metadata={"type": "normal"})
+builder.add_node("deduplicate_news", deduplicate_news_node, metadata={"type": "normal"})
 builder.add_node("generate_summary", generate_summary_node, metadata={"type": "agent", "llm_cfg": "config/generate_summary_llm_cfg.json"})
 builder.add_node("extract_date", extract_date_node, metadata={"type": "agent", "llm_cfg": "config/extract_date_llm_cfg.json"})
 builder.add_node("extract_keywords", extract_keywords_node, metadata={"type": "agent", "llm_cfg": "config/extract_keywords_llm_cfg.json"})
-builder.add_node("merge_news_info", merge_news_info_node)
-builder.add_node("create_table", create_table_node)
-builder.add_node("send_email", send_email_node)
-builder.add_node("save_news_history", save_news_history_node)
+builder.add_node("merge_news_info", merge_news_info_node, metadata={"type": "normal"})
+builder.add_node("create_table", create_table_node, metadata={"type": "normal"})
+builder.add_node("send_email", send_email_node, metadata={"type": "normal"})
+builder.add_node("save_news_history", save_news_history_node, metadata={"type": "normal"})
 
 # 设置入口点
 builder.set_entry_point("fetch_news")
@@ -40,7 +40,7 @@ builder.add_edge("fetch_news", "deduplicate_news")
 # deduplicate_news -> extract_date（提取日期）
 builder.add_edge("deduplicate_news", "extract_date")
 
-# extract_date 同时传给 generate_summary 和 extract_keywords（并行执行）
+# extract_date 同时传给 generate_summary 和 extract_keywords（并行执行，提高效率）
 builder.add_edge("extract_date", "generate_summary")
 builder.add_edge("extract_date", "extract_keywords")
 
