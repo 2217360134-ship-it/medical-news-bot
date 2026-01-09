@@ -38,7 +38,7 @@ def split_emails_node(state: SplitEmailsInput, config: RunnableConfig, runtime: 
 def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runtime[Context]) -> FetchNewsOutput:
     """
     title: 获取指定来源新闻
-    desc: 从今日头条、搜狐、人民网、新华网、央视网等获取医疗器械和医美相关的新闻
+    desc: 从今日头条、搜狐、腾讯网、网易新闻、凤凰网等获取医疗器械和医美相关的新闻
     integrations: 联网搜索
     """
     ctx = runtime.context
@@ -49,7 +49,7 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
     news_list = []
     
     # 定义目标新闻来源域名（最多支持5个）
-    target_sites = "toutiao.com|sohu.com|people.com.cn|xinhuanet.com|cctv.com"
+    target_sites = "toutiao.com|sohu.com|qq.com|163.com|ifeng.com"
     
     # 构建核心搜索词列表（确保获取的新闻主体内容与医疗器械、医美相关）
     medical_device_queries = [
