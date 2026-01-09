@@ -60,7 +60,7 @@ class FetchNewsOutput(BaseModel):
 
 class GenerateSummaryInput(BaseModel):
     """生成摘要节点的输入"""
-    news_list: List[NewsItem] = Field(..., description="需要生成摘要的新闻列表")
+    filtered_news_list: List[NewsItem] = Field(..., description="需要生成摘要的新闻列表")
 
 
 class GenerateSummaryOutput(BaseModel):
@@ -80,7 +80,7 @@ class ExtractDateOutput(BaseModel):
 
 class ExtractKeywordsInput(BaseModel):
     """关键词提取节点的输入"""
-    news_list: List[NewsItem] = Field(..., description="需要提取关键词的新闻列表")
+    summarized_news_list: List[NewsItem] = Field(..., description="需要提取关键词的新闻列表")
 
 
 class ExtractKeywordsOutput(BaseModel):
@@ -90,12 +90,12 @@ class ExtractKeywordsOutput(BaseModel):
 
 class CreateTableInput(BaseModel):
     """创建表格节点的输入"""
-    news_list: List[NewsItem] = Field(..., description="需要创建表格的新闻列表")
+    enriched_news_list: List[NewsItem] = Field(..., description="需要创建表格的新闻列表")
 
 
 class CreateTableOutput(BaseModel):
     """创建表格节点的输出"""
-    news_list: List[NewsItem] = Field(..., description="新闻列表")
+    enriched_news_list: List[NewsItem] = Field(..., description="新闻列表")
     synced_count: int = Field(..., description="创建的记录数")
     table_filepath: str = Field(..., description="表格文件路径")
     table_filename: str = Field(..., description="表格文件名")
@@ -104,7 +104,7 @@ class CreateTableOutput(BaseModel):
 class SendEmailInput(BaseModel):
     """发送邮件节点的输入"""
     emails_list: List[str] = Field(..., description="分割后的邮箱地址列表")
-    news_list: List[NewsItem] = Field(..., description="新闻列表")
+    enriched_news_list: List[NewsItem] = Field(..., description="新闻列表")
     table_filepath: str = Field(..., description="表格文件路径")
     table_filename: str = Field(..., description="表格文件名")
 

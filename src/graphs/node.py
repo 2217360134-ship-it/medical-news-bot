@@ -180,7 +180,7 @@ def generate_summary_node(state: GenerateSummaryInput, config: RunnableConfig, r
     
     summarized_news = []
     
-    for news in state.news_list:
+    for news in state.filtered_news_list:
         try:
             # 渲染用户提示词
             up_tpl = Template(user_prompt_template)
@@ -400,7 +400,7 @@ def extract_keywords_node(state: ExtractKeywordsInput, config: RunnableConfig, r
     
     enriched_news = []
     
-    for news in state.news_list:
+    for news in state.summarized_news_list:
         try:
             # 渲染用户提示词
             up_tpl = Template(user_prompt_template)
@@ -478,11 +478,11 @@ def create_table_node(state: CreateTableInput, config: RunnableConfig, runtime: 
         from datetime import datetime
         import os
         
-        print(f"收到 {len(state.news_list)} 条新闻")
-        if not state.news_list:
+        print(f"收到 {len(state.enriched_news_list)} 条新闻")
+        if not state.enriched_news_list:
             print("警告：没有新闻需要创建表格")
             return CreateTableOutput(
-                news_list=[],
+                enriched_news_list=[],
                 synced_count=0,
                 table_filepath="",
                 table_filename=""
@@ -490,7 +490,7 @@ def create_table_node(state: CreateTableInput, config: RunnableConfig, runtime: 
         
         # 准备数据
         table_data = []
-        for news in state.news_list:
+        for news in state.enriched_news_list:
             keywords_str = ", ".join(news.keywords) if news.keywords else ""
             table_data.append({
                 "标题": news.title,
@@ -520,8 +520,8 @@ def create_table_node(state: CreateTableInput, config: RunnableConfig, runtime: 
         # 这里我们返回文件路径，通过全局状态传递
         
         return CreateTableOutput(
-            news_list=state.news_list,
-            synced_count=len(state.news_list),
+            enriched_news_list=state.enriched_news_list,
+            synced_count=len(state.enriched_news_list),
             table_filepath=filepath,
             table_filename=filename
         )
@@ -557,7 +557,7 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
         email_config = json.loads(email_credential)
         
         # 检查是否有新闻数据
-        if not state.news_list:
+        if not state.enriched_news_list:
             return SendEmailOutput(
                 email_sent=False,
                 email_message="没有新闻需要发送"
@@ -604,17 +604,17 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
                 <div class="attachment-note">
                     <p><strong>📎 详细数据已作为附件发送</strong></p>
                     <p>附件文件: {state.table_filename}</p>
-                    <p>包含 {len(state.news_list)} 条新闻记录</p>
+                    <p>包含 {len(state.enriched_news_list)} 条新闻记录</p>
                 </div>
                 
                 <div class="summary">
-                    <p><strong>共收集到 {len(state.news_list)} 条相关新闻</strong></p>
+                    <p><strong>共收集到 {len(state.enriched_news_list)} 条相关新闻</strong></p>
                     <p>来源: 今日头条、搜狐、人民网、新华网、央视网</p>
                 </div>
         """
         
         # 添加每条新闻
-        for idx, news in enumerate(state.news_list, 1):
+        for idx, news in enumerate(state.enriched_news_list, 1):
             keywords_str = ", ".join(news.keywords) if news.keywords else "无"
             source_str = news.source if news.source else "未知"
             region_str = news.region if news.region else "-"
@@ -707,7 +707,7 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
             if failed_emails:
                 message = f"邮件已成功发送到 {success_count} 个收件人。失败的邮箱: {', '.join(failed_emails)}"
             else:
-                message = f"邮件已成功发送到所有 {success_count} 个收件人，包含 {len(state.news_list)} 条新闻及Excel附件"
+                message = f"邮件已成功发送到所有 {success_count} 个收件人，包含 {len(state.enriched_news_list)} 条新闻及Excel附件"
             return SendEmailOutput(
                 email_sent=True,
                 email_message=message

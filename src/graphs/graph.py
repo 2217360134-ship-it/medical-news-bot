@@ -28,9 +28,9 @@ builder.add_node("send_email", send_email_node)
 builder.set_entry_point("fetch_news")
 
 # 添加边 - 线性工作流
-builder.add_edge("fetch_news", "generate_summary")
-builder.add_edge("generate_summary", "extract_date")
-builder.add_edge("extract_date", "extract_keywords")
+builder.add_edge("fetch_news", "extract_date")
+builder.add_edge("extract_date", "generate_summary")
+builder.add_edge("generate_summary", "extract_keywords")
 builder.add_edge("extract_keywords", "create_table")
 builder.add_edge("create_table", "send_email")
 builder.add_edge("send_email", END)
