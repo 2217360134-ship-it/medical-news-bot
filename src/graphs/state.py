@@ -52,15 +52,24 @@ class GraphOutput(BaseModel):
     message: str = Field(..., description="执行结果消息")
 
 
+class SplitEmailsInput(BaseModel):
+    """分割邮箱地址节点的输入"""
+    emails: str = Field(..., description="接收邮件的邮箱地址，多个邮箱用逗号分隔")
+
+
+class SplitEmailsOutput(BaseModel):
+    """分割邮箱地址节点的输出"""
+    emails_list: List[str] = Field(..., description="分割后的邮箱地址列表")
+
+
 class FetchNewsInput(BaseModel):
     """新闻获取节点的输入"""
-    emails: str = Field(..., description="接收邮件的邮箱地址，多个邮箱用逗号分隔")
+    pass
 
 
 class FetchNewsOutput(BaseModel):
     """新闻获取节点的输出"""
     news_list: List[NewsItem] = Field(..., description="获取到的新闻列表")
-    emails_list: List[str] = Field(..., description="分割后的邮箱地址列表")
 
 
 class DeduplicateNewsInput(BaseModel):

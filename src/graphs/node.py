@@ -2,6 +2,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.runtime import Runtime
 from coze_coding_utils.runtime_ctx.context import Context
 from graphs.state import (
+    SplitEmailsInput, SplitEmailsOutput,
     FetchNewsInput, FetchNewsOutput,
     DeduplicateNewsInput, DeduplicateNewsOutput,
     GenerateSummaryInput, GenerateSummaryOutput,
@@ -20,6 +21,20 @@ import json
 from jinja2 import Template
 
 
+def split_emails_node(state: SplitEmailsInput, config: RunnableConfig, runtime: Runtime[Context]) -> SplitEmailsOutput:
+    """
+    title: 分割邮箱地址
+    desc: 将逗号分隔的邮箱字符串分割成列表，支持逗号、分号、空格等分隔符
+    """
+    # 将emails字符串分割成列表（支持逗号、分号、空格分隔）
+    emails_str = state.emails or ""
+    emails_list = [email.strip() for email in emails_str.replace(';', ',').replace(' ', ',').split(',') if email.strip()]
+    
+    print(f"分割后的邮箱列表: {emails_list}")
+    
+    return SplitEmailsOutput(emails_list=emails_list)
+
+
 def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runtime[Context]) -> FetchNewsOutput:
     """
     title: 获取指定来源新闻
@@ -27,12 +42,6 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
     integrations: 联网搜索
     """
     ctx = runtime.context
-    
-    # 将emails字符串分割成列表（支持逗号、分号、空格分隔）
-    emails_str = state.emails or ""
-    emails_list = [email.strip() for email in emails_str.replace(';', ',').replace(' ', ',').split(',') if email.strip()]
-    
-    print(f"分割后的邮箱列表: {emails_list}")
     
     # 导入网络搜索函数
     from tools.web_search_tool import web_search
@@ -167,7 +176,7 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
                 seen_titles.add(normalized_title)
                 final_news.append(news)
         
-        return FetchNewsOutput(news_list=final_news, emails_list=emails_list)
+        return FetchNewsOutput(news_list=final_news)
         
     except Exception as e:
         raise Exception(f"获取新闻失败: {str(e)}")

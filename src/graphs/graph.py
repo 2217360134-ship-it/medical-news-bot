@@ -5,6 +5,7 @@ from graphs.state import (
     GraphOutput
 )
 from graphs.node import (
+    split_emails_node,
     fetch_news_node,
     deduplicate_news_node,
     generate_summary_node,
@@ -20,6 +21,7 @@ from graphs.node import (
 builder = StateGraph(GlobalState, input_schema=GraphInput, output_schema=GraphOutput)
 
 # 添加节点（为所有节点添加metadata以便预览正确显示）
+builder.add_node("split_emails", split_emails_node, metadata={"type": "normal"})
 builder.add_node("fetch_news", fetch_news_node, metadata={"type": "normal"})
 builder.add_node("deduplicate_news", deduplicate_news_node, metadata={"type": "normal"})
 builder.add_node("generate_summary", generate_summary_node, metadata={"type": "agent", "llm_cfg": "config/generate_summary_llm_cfg.json"})
@@ -31,9 +33,12 @@ builder.add_node("send_email", send_email_node, metadata={"type": "normal"})
 builder.add_node("save_news_history", save_news_history_node, metadata={"type": "normal"})
 
 # 设置入口点
-builder.set_entry_point("fetch_news")
+builder.set_entry_point("split_emails")
 
 # 添加边 - 并行工作流架构
+# split_emails -> (无依赖，只是设置 emails_list)
+builder.add_edge("split_emails", "fetch_news")
+
 # fetch_news -> deduplicate_news（去重历史新闻）
 builder.add_edge("fetch_news", "deduplicate_news")
 
