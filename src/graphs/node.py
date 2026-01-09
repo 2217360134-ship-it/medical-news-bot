@@ -727,23 +727,143 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
         print(f"新闻数量: {len(state.enriched_news_list)}")
         
         # 检查是否有新闻数据
-        if not state.enriched_news_list:
-            print("❌ 不发送邮件: 新闻列表为空")
-            return SendEmailOutput(
-                email_sent=False,
-                email_message="没有新闻需要发送"
-            )
+        has_news = len(state.enriched_news_list) > 0
         
-        # 检查表格文件是否存在
-        print(f"表格文件路径: {state.table_filepath}")
-        print(f"表格文件存在: {os.path.exists(state.table_filepath) if state.table_filepath else False}")
+        if not has_news:
+            print("⚠️ 没有新闻数据，将发送通知邮件")
         
-        if not state.table_filepath or not os.path.exists(state.table_filepath):
-            print("❌ 不发送邮件: 表格文件不存在")
-            return SendEmailOutput(
-                email_sent=False,
-                email_message=f"表格文件不存在: {state.table_filepath}"
-            )
+        # 构建邮件内容（HTML格式）
+        from datetime import datetime
+        today = datetime.now().strftime("%Y-%m-%d")
+        
+        if has_news:
+            # 有新闻时，构建带新闻列表的邮件
+            # 检查表格文件是否存在
+            print(f"表格文件路径: {state.table_filepath}")
+            print(f"表格文件存在: {os.path.exists(state.table_filepath) if state.table_filepath else False}")
+            
+            if not state.table_filepath or not os.path.exists(state.table_filepath):
+                print("❌ 不发送邮件: 表格文件不存在")
+                return SendEmailOutput(
+                    email_sent=False,
+                    email_message=f"表格文件不存在: {state.table_filepath}"
+                )
+            
+            html_content = f"""
+            <html>
+            <head>
+                <style>
+                    body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                    .container {{ max-width: 800px; margin: 0 auto; padding: 20px; }}
+                    .header {{ background-color: #4CAF50; color: white; padding: 20px; text-align: center; }}
+                    .summary {{ background-color: #f8f8f8; padding: 15px; border-radius: 5px; margin: 20px 0; }}
+                    .attachment-note {{ background-color: #fff3cd; border: 1px solid #ffeeba; padding: 15px; border-radius: 5px; margin: 20px 0; text-align: center; }}
+                    .news-item {{ border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px; }}
+                    .news-item:hover {{ box-shadow: 0 2px 5px rgba(0,0,0,0.1); }}
+                    .news-title {{ font-size: 18px; font-weight: bold; margin-bottom: 10px; color: #2c3e50; }}
+                    .news-meta {{ color: #666; font-size: 14px; margin-bottom: 10px; }}
+                    .news-summary {{ margin-bottom: 10px; }}
+                    .news-keywords {{ color: #e74c3c; font-size: 14px; }}
+                    .news-link {{ color: #3498db; text-decoration: none; }}
+                    .news-link:hover {{ text-decoration: underline; }}
+                    .footer {{ text-align: center; margin-top: 30px; color: #999; font-size: 12px; }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h2>医疗器械医美新闻汇总</h2>
+                        <p>日期: {today}</p>
+                    </div>
+                    
+                    <div class="attachment-note">
+                        <p><strong>📎 详细数据已作为附件发送</strong></p>
+                        <p>附件文件: {state.table_filename}</p>
+                        <p>包含 {len(state.enriched_news_list)} 条新闻记录</p>
+                    </div>
+                    
+                    <div class="summary">
+                        <p><strong>共收集到 {len(state.enriched_news_list)} 条相关新闻</strong></p>
+                        <p>来源: 今日头条、搜狐、人民网、新华网、央视网</p>
+                    </div>
+            """
+            
+            # 添加每条新闻
+            for idx, news in enumerate(state.enriched_news_list, 1):
+                keywords_str = ", ".join(news.keywords) if news.keywords else "无"
+                source_str = news.source if news.source else "未知"
+                region_str = news.region if news.region else "-"
+                html_content += f"""
+                <div class="news-item">
+                    <div class="news-title">{idx}. {news.title}</div>
+                    <div class="news-meta">
+                        <strong>日期:</strong> {news.date} |
+                        <strong>来源:</strong> {source_str} |
+                        <strong>地区:</strong> {region_str} |
+                        <strong>关键词:</strong> <span class="news-keywords">{keywords_str}</span>
+                    </div>
+                    <div class="news-summary">
+                        <strong>摘要:</strong> {news.summary}
+                    </div>
+                    <div>
+                        <a href="{news.url}" class="news-link">查看原文 &rarr;</a>
+                    </div>
+                </div>
+            """
+            
+            html_content += f"""
+                    <div class="footer">
+                        <p>此邮件由新闻收集助手自动发送</p>
+                        <p>如有问题，请联系管理员</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """
+            
+            # 读取Excel文件内容
+            with open(state.table_filepath, 'rb') as f:
+                file_content = f.read()
+        else:
+            # 没有新闻时，构建通知邮件
+            html_content = f"""
+            <html>
+            <head>
+                <style>
+                    body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                    .container {{ max-width: 800px; margin: 0 auto; padding: 20px; }}
+                    .header {{ background-color: #ff9800; color: white; padding: 20px; text-align: center; }}
+                    .notice {{ background-color: #fff3cd; border: 1px solid #ffeeba; padding: 20px; border-radius: 5px; margin: 20px 0; }}
+                    .footer {{ text-align: center; margin-top: 30px; color: #999; font-size: 12px; }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h2>医疗器械医美新闻汇总</h2>
+                        <p>日期: {today}</p>
+                    </div>
+                    
+                    <div class="notice">
+                        <h3>⚠️ 今日未收集到新新闻</h3>
+                        <p>可能的原因：</p>
+                        <ul>
+                            <li>今日无医疗器械或医美相关新闻</li>
+                            <li>所有新闻已在之前发送过（已去重）</li>
+                            <li>网络搜索服务暂时不可用</li>
+                        </ul>
+                        <p><strong>工作流已正常运行，请勿担心。</strong></p>
+                        <p>建议：明天再检查一次，或联系管理员。</p>
+                    </div>
+                    
+                    <div class="footer">
+                        <p>此邮件由新闻收集助手自动发送</p>
+                        <p>如有问题，请联系管理员</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """
         
         # 构建邮件内容（HTML格式）
         from datetime import datetime
@@ -825,34 +945,40 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
         success_count = 0
         failed_emails = []
         
-        # 读取Excel文件内容（用于每个邮件）
-        with open(state.table_filepath, 'rb') as f:
-            file_content = f.read()
-        
         # 为每个收件人单独发送邮件
         for recipient_email in state.emails_list:
             try:
-                # 创建多部分邮件
-                msg = MIMEMultipart()
-                msg["From"] = formataddr(("新闻收集助手", email_config["account"]))
-                msg["To"] = recipient_email  # 只显示一个收件地址
-                msg["Subject"] = Header(f"医疗器械医美新闻汇总 - {today}", 'utf-8')
-                msg["Date"] = formatdate(localtime=True)
-                msg["Message-ID"] = make_msgid()
-                
-                # 添加HTML正文
-                msg.attach(MIMEText(html_content, 'html', 'utf-8'))
-                
-                # 添加Excel附件
-                part = MIMEBase('application', 'octet-stream')
-                part.set_payload(file_content)
-                
-                encoders.encode_base64(part)
-                part.add_header(
-                    'Content-Disposition',
-                    f'attachment; filename="{Header(state.table_filename, "utf-8").encode()}'
-                )
-                msg.attach(part)
+                # 创建邮件
+                if has_news:
+                    # 有新闻时，创建多部分邮件（HTML + 附件）
+                    msg = MIMEMultipart()
+                    msg["From"] = formataddr(("新闻收集助手", email_config["account"]))
+                    msg["To"] = recipient_email  # 只显示一个收件地址
+                    msg["Subject"] = Header(f"医疗器械医美新闻汇总 - {today}", 'utf-8')
+                    msg["Date"] = formatdate(localtime=True)
+                    msg["Message-ID"] = make_msgid()
+                    
+                    # 添加HTML正文
+                    msg.attach(MIMEText(html_content, 'html', 'utf-8'))
+                    
+                    # 添加Excel附件
+                    part = MIMEBase('application', 'octet-stream')
+                    part.set_payload(file_content)
+                    
+                    encoders.encode_base64(part)
+                    part.add_header(
+                        'Content-Disposition',
+                        f'attachment; filename="{Header(state.table_filename, "utf-8").encode()}'
+                    )
+                    msg.attach(part)
+                else:
+                    # 没有新闻时，只发送HTML通知邮件
+                    msg = MIMEText(html_content, 'html', 'utf-8')
+                    msg["From"] = formataddr(("新闻收集助手", email_config["account"]))
+                    msg["To"] = recipient_email
+                    msg["Subject"] = Header(f"新闻汇总 - {today}（无新新闻）", 'utf-8')
+                    msg["Date"] = formatdate(localtime=True)
+                    msg["Message-ID"] = make_msgid()
                 
                 # 发送邮件
                 ctx_ssl = ssl.create_default_context()
@@ -871,10 +997,10 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
                     server.quit()
                 
                 success_count += 1
-                print(f"邮件已成功发送到: {recipient_email}")
+                print(f"✅ 邮件已成功发送到: {recipient_email}")
                 
             except Exception as e:
-                print(f"发送到 {recipient_email} 失败: {str(e)}")
+                print(f"❌ 发送到 {recipient_email} 失败: {str(e)}")
                 failed_emails.append(f"{recipient_email}: {str(e)}")
         
         # 返回发送结果
@@ -882,7 +1008,10 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
             if failed_emails:
                 message = f"邮件已成功发送到 {success_count} 个收件人。失败的邮箱: {', '.join(failed_emails)}"
             else:
-                message = f"邮件已成功发送到所有 {success_count} 个收件人，包含 {len(state.enriched_news_list)} 条新闻及Excel附件"
+                if has_news:
+                    message = f"邮件已成功发送到所有 {success_count} 个收件人，包含 {len(state.enriched_news_list)} 条新闻及Excel附件"
+                else:
+                    message = f"已成功发送通知邮件到所有 {success_count} 个收件人（今日无新新闻）"
             return SendEmailOutput(
                 email_sent=True,
                 email_message=message
