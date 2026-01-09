@@ -90,6 +90,7 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
                     search_type="web",
                     count=10,
                     need_summary=True,
+                    need_content=True,
                     sites=target_sites
                 )
                 all_web_items.extend(web_items)
@@ -108,6 +109,7 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
                     search_type="web",
                     count=10,
                     need_summary=True,
+                    need_content=True,
                     sites=target_sites
                 )
                 all_web_items.extend(web_items)
@@ -149,6 +151,7 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
                 date=publish_date,
                 url=item.Url,
                 summary=item.Snippet or "",
+                content=item.Content or "",
                 keywords=[]
             )
             news_list.append(news_item)
@@ -471,7 +474,8 @@ def extract_keywords_node(state: ExtractKeywordsInput, config: RunnableConfig, r
             up_tpl = Template(user_prompt_template)
             user_prompt = up_tpl.render({
                 "title": news.title,
-                "summary": news.summary
+                "summary": news.summary,
+                "content": news.content
             })
             
             # 调用大语言模型

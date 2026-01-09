@@ -8,6 +8,7 @@ class NewsItem(BaseModel):
     date: str = Field(..., description="新闻发布日期")
     url: str = Field(..., description="新闻链接")
     summary: str = Field(..., description="新闻摘要")
+    content: str = Field(default="", description="新闻正文")
     source: str = Field(default="", description="新闻来源")
     region: str = Field(default="", description="地区")
     keywords: List[str] = Field(default=[], description="关键词列表")
