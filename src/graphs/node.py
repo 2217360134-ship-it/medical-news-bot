@@ -5,7 +5,7 @@ from graphs.state import (
     FetchNewsInput, FetchNewsOutput,
     FilterNewsInput, FilterNewsOutput,
     ExtractKeywordsInput, ExtractKeywordsOutput,
-    SyncToFeishuInput, SyncToFeishuOutput,
+    CreateTableInput, CreateTableOutput,
     SendEmailInput, SendEmailOutput,
     NewsItem
 )
@@ -264,157 +264,72 @@ def extract_keywords_node(state: ExtractKeywordsInput, config: RunnableConfig, r
     return ExtractKeywordsOutput(enriched_news_list=enriched_news)
 
 
-def sync_to_feishu_node(state: SyncToFeishuInput, config: RunnableConfig, runtime: Runtime[Context]) -> SyncToFeishuOutput:
+def create_table_node(state: CreateTableInput, config: RunnableConfig, runtime: Runtime[Context]) -> CreateTableOutput:
     """
-    title: 同步到飞书表格
-    desc: 将新闻数据批量写入飞书表格
-    integrations: 飞书多维表格
+    title: 创建新闻表格
+    desc: 将新闻数据创建为Excel表格文件
     """
     ctx = runtime.context
     
-    # 导入飞书多维表格客户端
-    from tools.feishu_bitable_tool import FeishuBitable
-    
     try:
+        import pandas as pd
+        from datetime import datetime
+        import os
+        
         print(f"收到 {len(state.news_list)} 条新闻")
         if not state.news_list:
-            print("警告：没有新闻需要同步")
-            return SyncToFeishuOutput(
+            print("警告：没有新闻需要创建表格")
+            return CreateTableOutput(
                 news_list=[],
                 synced_count=0,
-                app_token="",
-                table_id=""
+                table_filepath="",
+                table_filename=""
             )
         
-        # 创建飞书客户端
-        client = FeishuBitable()
-        
-        app_token = state.app_token
-        table_id = state.table_id
-        
-        # 如果没有提供app_token和table_id，提示用户需要提供
-        if not app_token or not table_id:
-            print("提示：为了正确使用此工作流，请提供飞书多维表格的app_token和table_id")
-            print("或者，工作流将无法自动创建Base和表")
-            
-            # 尝试创建新的Base和表（可能失败）
-            try:
-                # 创建新的Base
-                print("开始创建Base...")
-                base_resp = client.create_base(name="医疗器械医美新闻收集")
-                app_token = base_resp["data"]["app"]["app_token"]
-                print(f"创建Base成功: app_token={app_token}")
-            except Exception as create_base_error:
-                print(f"创建Base失败: {str(create_base_error)}")
-                raise Exception(f"无法自动创建飞书Base: {str(create_base_error)}")
-            
-            try:
-                # 创建数据表（使用不同的请求格式）
-                print("开始创建表...")
-                # 尝试使用table格式，并添加字段
-                table_resp = client._request(
-                    "POST",
-                    f"/bitable/v1/apps/{app_token}/tables",
-                    json={
-                        "table": {
-                            "name": "news_data",
-                            "fields": [
-                                {
-                                    "field_name": "标题",
-                                    "type": 1
-                                },
-                                {
-                                    "field_name": "日期",
-                                    "type": 1
-                                },
-                                {
-                                    "field_name": "关键词",
-                                    "type": 1
-                                },
-                                {
-                                    "field_name": "链接",
-                                    "type": 1
-                                },
-                                {
-                                    "field_name": "摘要",
-                                    "type": 1
-                                }
-                            ]
-                        }
-                    }
-                )
-                print(f"创建表响应: {table_resp}")
-                
-                # 检查响应结构
-                if "data" in table_resp:
-                    if "table" in table_resp["data"]:
-                        table_id = table_resp["data"]["table"]["table_id"]
-                        print(f"创建表成功: table_id={table_id}")
-                    else:
-                        print(f"响应中没有table键，data内容: {table_resp['data']}")
-                        # 尝试直接获取table_id
-                        table_id = table_resp["data"].get("table_id", "")
-                        if not table_id:
-                            raise Exception("无法从响应中获取table_id")
-                else:
-                    print(f"响应中没有data键，完整响应: {table_resp}")
-                    raise Exception("响应格式不正确")
-            except Exception as create_table_error:
-                print(f"创建表失败: {str(create_table_error)}")
-                raise Exception(f"无法自动创建飞书表: {str(create_table_error)}")
-            except Exception as create_error:
-                print(f"创建Base或表失败: {str(create_error)}")
-                print("请手动创建飞书多维表格，并提供app_token和table_id")
-                raise Exception(f"无法自动创建飞书Base和表，请提供app_token和table_id: {str(create_error)}")
-        
-        # 准备批量插入的记录
-        records = []
+        # 准备数据
+        table_data = []
         for news in state.news_list:
-            # 将关键词列表转换为逗号分隔的字符串
             keywords_str = ", ".join(news.keywords) if news.keywords else ""
-            
-            records.append({
-                "fields": {
-                    "标题": str(news.title) if news.title else "",
-                    "日期": str(news.date) if news.date else "",
-                    "关键词": keywords_str,
-                    "链接": str(news.url) if news.url else "",
-                    "摘要": str(news.summary) if news.summary else ""
-                }
+            table_data.append({
+                "标题": news.title,
+                "日期": news.date,
+                "关键词": keywords_str,
+                "链接": news.url,
+                "摘要": news.summary
             })
         
-        # 批量插入记录
-        if records:
-            try:
-                sync_resp = client.add_records(
-                    app_token=app_token,
-                    table_id=table_id,
-                    records=records,
-                    user_id_type="open_id"
-                )
-                synced_count = len(sync_resp.get("data", {}).get("records", []))
-            except Exception as sync_error:
-                print(f"插入记录失败: {str(sync_error)}")
-                print(f"records内容: {records[:1] if records else []}")  # 打印第一条记录
-                raise Exception(f"同步到飞书失败: {str(sync_error)}")
-        else:
-            synced_count = 0
+        # 创建DataFrame
+        df = pd.DataFrame(table_data)
         
-        return SyncToFeishuOutput(
+        # 生成文件名（包含日期）
+        today = datetime.now().strftime("%Y%m%d")
+        filename = f"新闻汇总_{today}.xlsx"
+        filepath = f"/tmp/{filename}"
+        
+        # 保存为Excel文件
+        df.to_excel(filepath, index=False, engine='openpyxl')
+        
+        print(f"Excel表格已创建: {filepath}")
+        
+        # 将文件路径存储在全局状态中，供邮件节点使用
+        # 通过修改全局状态实现
+        # 这里我们返回文件路径，通过全局状态传递
+        
+        return CreateTableOutput(
             news_list=state.news_list,
-            synced_count=synced_count,
-            app_token=app_token,
-            table_id=table_id
+            synced_count=len(state.news_list),
+            table_filepath=filepath,
+            table_filename=filename
         )
         
     except Exception as e:
-        raise Exception(f"同步到飞书失败: {str(e)}")
+        raise Exception(f"创建表格失败: {str(e)}")
 
 
 def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runtime[Context]) -> SendEmailOutput:
     """
     title: 发送邮件通知
-    desc: 将新闻汇总信息发送到指定邮箱
+    desc: 将新闻汇总信息和Excel表格附件发送到指定邮箱
     integrations: 邮件
     """
     ctx = runtime.context
@@ -423,7 +338,11 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
         # 导入邮件相关模块
         import smtplib
         import ssl
+        import os
+        from email.mime.multipart import MIMEMultipart
         from email.mime.text import MIMEText
+        from email.mime.base import MIMEBase
+        from email import encoders
         from email.header import Header
         from email.utils import formataddr, formatdate, make_msgid
         from coze_workload_identity import Client
@@ -440,6 +359,13 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
                 email_message="没有新闻需要发送"
             )
         
+        # 检查表格文件是否存在
+        if not state.table_filepath or not os.path.exists(state.table_filepath):
+            return SendEmailOutput(
+                email_sent=False,
+                email_message=f"表格文件不存在: {state.table_filepath}"
+            )
+        
         # 构建邮件内容（HTML格式）
         from datetime import datetime
         today = datetime.now().strftime("%Y-%m-%d")
@@ -452,6 +378,7 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
                 .container {{ max-width: 800px; margin: 0 auto; padding: 20px; }}
                 .header {{ background-color: #4CAF50; color: white; padding: 20px; text-align: center; }}
                 .summary {{ background-color: #f8f8f8; padding: 15px; border-radius: 5px; margin: 20px 0; }}
+                .attachment-note {{ background-color: #fff3cd; border: 1px solid #ffeeba; padding: 15px; border-radius: 5px; margin: 20px 0; text-align: center; }}
                 .news-item {{ border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px; }}
                 .news-item:hover {{ box-shadow: 0 2px 5px rgba(0,0,0,0.1); }}
                 .news-title {{ font-size: 18px; font-weight: bold; margin-bottom: 10px; color: #2c3e50; }}
@@ -468,6 +395,12 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
                 <div class="header">
                     <h2>医疗器械医美新闻汇总</h2>
                     <p>日期: {today}</p>
+                </div>
+                
+                <div class="attachment-note">
+                    <p><strong>📎 详细数据已作为附件发送</strong></p>
+                    <p>附件文件: {state.table_filename}</p>
+                    <p>包含 {len(state.news_list)} 条新闻记录</p>
                 </div>
                 
                 <div class="summary">
@@ -505,13 +438,28 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
         </html>
         """
         
-        # 创建邮件对象
-        msg = MIMEText(html_content, 'html', 'utf-8')
+        # 创建多部分邮件
+        msg = MIMEMultipart()
         msg["From"] = formataddr(("新闻收集助手", email_config["account"]))
         msg["To"] = state.email
         msg["Subject"] = Header(f"医疗器械医美新闻汇总 - {today}", 'utf-8')
         msg["Date"] = formatdate(localtime=True)
         msg["Message-ID"] = make_msgid()
+        
+        # 添加HTML正文
+        msg.attach(MIMEText(html_content, 'html', 'utf-8'))
+        
+        # 添加Excel附件
+        with open(state.table_filepath, 'rb') as f:
+            part = MIMEBase('application', 'octet-stream')
+            part.set_payload(f.read())
+        
+        encoders.encode_base64(part)
+        part.add_header(
+            'Content-Disposition',
+            f'attachment; filename="{Header(state.table_filename, 'utf-8').encode()}'
+        )
+        msg.attach(part)
         
         # 发送邮件
         ctx_ssl = ssl.create_default_context()
@@ -530,7 +478,7 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
         
         return SendEmailOutput(
             email_sent=True,
-            email_message=f"邮件已成功发送到 {state.email}，包含 {len(state.news_list)} 条新闻"
+            email_message=f"邮件已成功发送到 {state.email}，包含 {len(state.news_list)} 条新闻及Excel附件"
         )
         
     except smtplib.SMTPAuthenticationError as e:

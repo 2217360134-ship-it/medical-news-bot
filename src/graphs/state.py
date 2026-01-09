@@ -13,12 +13,12 @@ class NewsItem(BaseModel):
 
 class GlobalState(BaseModel):
     """全局状态定义"""
-    # 飞书多维表格信息
-    app_token: str = Field(default="", description="飞书多维表格App Token")
-    table_id: str = Field(default="", description="飞书数据表ID")
-    
     # 邮件信息
     email: str = Field(default="", description="接收邮件的邮箱地址")
+    
+    # 表格文件信息
+    table_filepath: str = Field(default="", description="Excel表格文件路径")
+    table_filename: str = Field(default="", description="Excel表格文件名")
     
     # 新闻数据流
     raw_news_list: List[NewsItem] = Field(default=[], description="从今日头条获取的原始新闻列表")
@@ -26,16 +26,13 @@ class GlobalState(BaseModel):
     enriched_news_list: List[NewsItem] = Field(default=[], description="提取关键词后的新闻列表")
     
     # 结果
-    sync_result: dict = Field(default={}, description="同步到飞书的结果")
-    synced_count: int = Field(default=0, description="成功同步的记录数")
+    synced_count: int = Field(default=0, description="创建的新闻记录数")
     email_sent: bool = Field(default=False, description="邮件是否发送成功")
     email_message: str = Field(default="", description="邮件发送结果消息")
 
 
 class GraphInput(BaseModel):
     """工作流的输入"""
-    app_token: str = Field(default="", description="飞书多维表格App Token（可选，如不提供则创建新Base）")
-    table_id: str = Field(default="", description="飞书数据表ID（可选，如不提供则创建新表）")
     email: str = Field(..., description="接收邮件的邮箱地址")
 
 
@@ -76,26 +73,25 @@ class ExtractKeywordsOutput(BaseModel):
     enriched_news_list: List[NewsItem] = Field(..., description="提取关键词后的新闻列表")
 
 
-class SyncToFeishuInput(BaseModel):
-    """飞书多维表格同步节点的输入"""
-    news_list: List[NewsItem] = Field(..., description="需要同步的新闻列表")
-    app_token: str = Field(default="", description="飞书多维表格App Token")
-    table_id: str = Field(default="", description="飞书数据表ID")
+class CreateTableInput(BaseModel):
+    """创建表格节点的输入"""
+    news_list: List[NewsItem] = Field(..., description="需要创建表格的新闻列表")
 
 
-class SyncToFeishuOutput(BaseModel):
-    """飞书多维表格同步节点的输出"""
-    news_list: List[NewsItem] = Field(..., description="同步的新闻列表")
-    synced_count: int = Field(..., description="成功同步的记录数")
-    app_token: str = Field(..., description="使用的App Token")
-    table_id: str = Field(..., description="使用的数据表ID")
+class CreateTableOutput(BaseModel):
+    """创建表格节点的输出"""
+    news_list: List[NewsItem] = Field(..., description="新闻列表")
+    synced_count: int = Field(..., description="创建的记录数")
+    table_filepath: str = Field(..., description="表格文件路径")
+    table_filename: str = Field(..., description="表格文件名")
 
 
 class SendEmailInput(BaseModel):
     """发送邮件节点的输入"""
     email: str = Field(..., description="接收邮件的邮箱地址")
     news_list: List[NewsItem] = Field(..., description="新闻列表")
-    synced_count: int = Field(..., description="同步到飞书的新闻数量")
+    table_filepath: str = Field(..., description="表格文件路径")
+    table_filename: str = Field(..., description="表格文件名")
 
 
 class SendEmailOutput(BaseModel):
