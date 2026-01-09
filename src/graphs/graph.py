@@ -10,7 +10,8 @@ from graphs.node import (
     extract_date_node,
     extract_keywords_node,
     create_table_node,
-    send_email_node
+    send_email_node,
+    merge_news_info_node
 )
 
 # 创建状态图, 一定指定工作流的入参和出参
@@ -21,17 +22,24 @@ builder.add_node("fetch_news", fetch_news_node)
 builder.add_node("generate_summary", generate_summary_node, metadata={"type": "agent", "llm_cfg": "config/generate_summary_llm_cfg.json"})
 builder.add_node("extract_date", extract_date_node, metadata={"type": "agent", "llm_cfg": "config/extract_date_llm_cfg.json"})
 builder.add_node("extract_keywords", extract_keywords_node, metadata={"type": "agent", "llm_cfg": "config/extract_keywords_llm_cfg.json"})
+builder.add_node("merge_news_info", merge_news_info_node)
 builder.add_node("create_table", create_table_node)
 builder.add_node("send_email", send_email_node)
 
 # 设置入口点
 builder.set_entry_point("fetch_news")
 
-# 添加边 - 线性工作流
+# 添加边 - 并行工作流架构
+# extract_date 同时传给 generate_summary 和 extract_keywords（并行执行）
 builder.add_edge("fetch_news", "extract_date")
 builder.add_edge("extract_date", "generate_summary")
-builder.add_edge("generate_summary", "extract_keywords")
-builder.add_edge("extract_keywords", "create_table")
+builder.add_edge("extract_date", "extract_keywords")
+
+# 并行分支汇聚：等待 generate_summary 和 extract_keywords 都完成后，执行 merge_news_info
+builder.add_edge(["generate_summary", "extract_keywords"], "merge_news_info")
+
+# 后续流程
+builder.add_edge("merge_news_info", "create_table")
 builder.add_edge("create_table", "send_email")
 builder.add_edge("send_email", END)
 

@@ -80,7 +80,7 @@ class ExtractDateOutput(BaseModel):
 
 class ExtractKeywordsInput(BaseModel):
     """关键词提取节点的输入"""
-    summarized_news_list: List[NewsItem] = Field(..., description="需要提取关键词的新闻列表")
+    filtered_news_list: List[NewsItem] = Field(..., description="需要提取关键词的新闻列表")
 
 
 class ExtractKeywordsOutput(BaseModel):
@@ -113,3 +113,14 @@ class SendEmailOutput(BaseModel):
     """发送邮件节点的输出"""
     email_sent: bool = Field(..., description="邮件是否发送成功")
     email_message: str = Field(..., description="邮件发送结果消息")
+
+
+class MergeNewsInfoInput(BaseModel):
+    """合并新闻信息节点的输入"""
+    summarized_news_list: List[NewsItem] = Field(..., description="生成摘要后的新闻列表（含source和region）")
+    enriched_news_list: List[NewsItem] = Field(..., description="提取关键词后的新闻列表")
+
+
+class MergeNewsInfoOutput(BaseModel):
+    """合并新闻信息节点的输出"""
+    enriched_news_list: List[NewsItem] = Field(..., description="合并后的完整新闻列表（包含摘要、关键词、source、region）")

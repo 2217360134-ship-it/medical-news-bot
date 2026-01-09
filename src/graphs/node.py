@@ -8,6 +8,7 @@ from graphs.state import (
     ExtractKeywordsInput, ExtractKeywordsOutput,
     CreateTableInput, CreateTableOutput,
     SendEmailInput, SendEmailOutput,
+    MergeNewsInfoInput, MergeNewsInfoOutput,
     NewsItem
 )
 import os
@@ -400,7 +401,7 @@ def extract_keywords_node(state: ExtractKeywordsInput, config: RunnableConfig, r
     
     enriched_news = []
     
-    for news in state.summarized_news_list:
+    for news in state.filtered_news_list:
         try:
             # 渲染用户提示词
             up_tpl = Template(user_prompt_template)
@@ -733,3 +734,52 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
             email_sent=False,
             email_message=f"发送邮件失败: {str(e)}"
         )
+
+
+def merge_news_info_node(state: MergeNewsInfoInput, config: RunnableConfig, runtime: Runtime[Context]) -> MergeNewsInfoOutput:
+    """
+    title: 合并新闻信息
+    desc: 将摘要生成和关键词提取的结果合并，确保每条新闻包含完整的摘要、关键词、来源和地区信息
+    """
+    ctx = runtime.context
+    
+    try:
+        # 创建一个URL到新闻的映射，方便快速查找
+        # 优先使用summarized_news_list中的数据（包含source和region）
+        summarized_map = {news.url: news for news in state.summarized_news_list}
+        
+        # 创建一个URL到关键词的映射
+        keywords_map = {news.url: news.keywords for news in state.enriched_news_list}
+        
+        # 合并结果
+        merged_news = []
+        
+        for url, summary_news in summarized_map.items():
+            # 复制摘要新闻（包含source和region）
+            merged_news_item = NewsItem(
+                title=summary_news.title,
+                date=summary_news.date,
+                url=summary_news.url,
+                summary=summary_news.summary,
+                source=summary_news.source,
+                region=summary_news.region,
+                keywords=[]  # 初始化为空
+            )
+            
+            # 如果关键词列表中有该新闻的关键词，则合并
+            if url in keywords_map:
+                merged_news_item.keywords = keywords_map[url]
+            else:
+                # 如果没有找到关键词，保持为空列表
+                merged_news_item.keywords = []
+            
+            merged_news.append(merged_news_item)
+        
+        print(f"合并完成: 共 {len(merged_news)} 条新闻")
+        print(f"摘要生成节点提供: {len(state.summarized_news_list)} 条")
+        print(f"关键词提取节点提供: {len(state.enriched_news_list)} 条")
+        
+        return MergeNewsInfoOutput(enriched_news_list=merged_news)
+        
+    except Exception as e:
+        raise Exception(f"合并新闻信息失败: {str(e)}")
