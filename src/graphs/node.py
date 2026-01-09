@@ -286,7 +286,8 @@ def generate_summary_node(state: GenerateSummaryInput, config: RunnableConfig, r
             user_prompt = up_tpl.render({
                 "title": news.title,
                 "original_summary": news.summary,
-                "url": news.url
+                "url": news.url,
+                "content": news.content
             })
             
             # 调用大语言模型
