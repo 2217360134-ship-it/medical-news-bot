@@ -1,6 +1,7 @@
 [project]
 entrypoint = "src/main.py"
 requires = ["python-3.12"]
+schema = "schema.json"
 
 [dev]
 build = ["bash", "scripts/setup.sh"]

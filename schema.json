@@ -1,0 +1,97 @@
+{
+  "title": "医疗器械医美新闻收集工作流",
+  "description": "从多个权威新闻来源网站自动收集医疗器械和医美相关的新闻，整理为Excel表格并通过邮件发送",
+  "inputs": [
+    {
+      "name": "emails",
+      "type": "string",
+      "title": "接收邮箱地址",
+      "description": "接收邮件的邮箱地址，多个邮箱用逗号分隔，例如：user1@example.com,user2@example.com",
+      "required": true,
+      "placeholder": "请输入邮箱地址"
+    },
+    {
+      "name": "selected_sites",
+      "type": "multiselect",
+      "title": "选择新闻来源网站",
+      "description": "选择要从中收集新闻的网站（可多选）",
+      "required": false,
+      "default": [
+        "toutiao.com",
+        "sohu.com",
+        "qq.com",
+        "163.com",
+        "ifeng.com",
+        "thepaper.cn",
+        "finance.sina.com.cn",
+        "sina.com.cn",
+        "ylqx.qgyyzs.net",
+        "camdi.cn",
+        "qxw18.com",
+        "cctv.com"
+      ],
+      "options": [
+        {
+          "value": "toutiao.com",
+          "label": "今日头条",
+          "description": "https://www.toutiao.com"
+        },
+        {
+          "value": "sohu.com",
+          "label": "搜狐",
+          "description": "https://www.sohu.com"
+        },
+        {
+          "value": "qq.com",
+          "label": "腾讯网",
+          "description": "https://www.qq.com"
+        },
+        {
+          "value": "163.com",
+          "label": "网易新闻",
+          "description": "https://www.163.com"
+        },
+        {
+          "value": "ifeng.com",
+          "label": "凤凰网",
+          "description": "https://www.ifeng.com"
+        },
+        {
+          "value": "thepaper.cn",
+          "label": "澎湃新闻网",
+          "description": "https://www.thepaper.cn"
+        },
+        {
+          "value": "finance.sina.com.cn",
+          "label": "新浪财经",
+          "description": "https://finance.sina.com.cn"
+        },
+        {
+          "value": "sina.com.cn",
+          "label": "新浪网",
+          "description": "https://www.sina.com.cn"
+        },
+        {
+          "value": "ylqx.qgyyzs.net",
+          "label": "环球网",
+          "description": "https://ylqx.qgyyzs.net"
+        },
+        {
+          "value": "camdi.cn",
+          "label": "医疗器械行业协会",
+          "description": "http://www.camdi.cn"
+        },
+        {
+          "value": "qxw18.com",
+          "label": "东方医疗器械网",
+          "description": "https://www.qxw18.com"
+        },
+        {
+          "value": "cctv.com",
+          "label": "央视网",
+          "description": "https://www.cctv.com"
+        }
+      ]
+    }
+  ]
+}
