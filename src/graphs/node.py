@@ -5,12 +5,10 @@ from graphs.state import (
     SplitEmailsInput, SplitEmailsOutput,
     FetchNewsInput, FetchNewsOutput,
     DeduplicateNewsInput, DeduplicateNewsOutput,
-    GenerateSummaryInput, GenerateSummaryOutput,
     ExtractDateInput, ExtractDateOutput,
-    ExtractKeywordsInput, ExtractKeywordsOutput,
+    EnrichNewsInput, EnrichNewsOutput,
     CreateTableInput, CreateTableOutput,
     SendEmailInput, SendEmailOutput,
-    MergeNewsInfoInput, MergeNewsInfoOutput,
     SaveNewsHistoryInput, SaveNewsHistoryOutput,
     NewsItem
 )
@@ -247,18 +245,18 @@ def deduplicate_news_node(state: DeduplicateNewsInput, config: RunnableConfig, r
         return DeduplicateNewsOutput(deduplicated_news_list=state.news_list)
 
 
-def generate_summary_node(state: GenerateSummaryInput, config: RunnableConfig, runtime: Runtime[Context]) -> GenerateSummaryOutput:
+def enrich_news_node(state: EnrichNewsInput, config: RunnableConfig, runtime: Runtime[Context]) -> EnrichNewsOutput:
     """
-    title: 生成新闻摘要
-    desc: 使用大语言模型为每条新闻生成真实的精简摘要
+    title: 丰富新闻信息
+    desc: 使用大语言模型同时生成新闻摘要、提取关键词、来源和地区信息
     integrations: 大语言模型
     """
     ctx = runtime.context
     
     # 检查是否为空列表
     if not state.filtered_news_list:
-        print("新闻列表为空，跳过摘要生成")
-        return GenerateSummaryOutput(summarized_news_list=[])
+        print("新闻列表为空，跳过新闻丰富")
+        return EnrichNewsOutput(enriched_news_list=[])
     
     # 读取配置文件
     cfg_file = os.path.join(os.getenv("COZE_WORKSPACE_PATH"), config['metadata']['llm_cfg'])
@@ -277,7 +275,7 @@ def generate_summary_node(state: GenerateSummaryInput, config: RunnableConfig, r
     api_key = os.getenv("COZE_WORKLOAD_IDENTITY_API_KEY")
     base_url = os.getenv("COZE_INTEGRATION_MODEL_BASE_URL")
     
-    summarized_news = []
+    enriched_news = []
     
     for news in state.filtered_news_list:
         try:
@@ -285,8 +283,6 @@ def generate_summary_node(state: GenerateSummaryInput, config: RunnableConfig, r
             up_tpl = Template(user_prompt_template)
             user_prompt = up_tpl.render({
                 "title": news.title,
-                "original_summary": news.summary,
-                "url": news.url,
                 "content": news.content
             })
             
@@ -302,7 +298,7 @@ def generate_summary_node(state: GenerateSummaryInput, config: RunnableConfig, r
                     }
                 },
                 temperature=llm_config.get("temperature", 0.5),
-                max_tokens=llm_config.get("max_tokens", 300),
+                max_tokens=llm_config.get("max_tokens", 800),
                 default_headers=default_headers(ctx),
             )
             
@@ -321,7 +317,7 @@ def generate_summary_node(state: GenerateSummaryInput, config: RunnableConfig, r
                         if isinstance(item, str):
                             result_text += item
             
-            # 解析结果 - 尝试提取JSON格式的摘要、来源和地区
+            # 解析结果 - 尝试提取JSON格式的摘要、来源、地区和关键词
             try:
                 import re
                 
@@ -342,41 +338,55 @@ def generate_summary_node(state: GenerateSummaryInput, config: RunnableConfig, r
                         except:
                             pass
                 
-                # 方法3: 尝试匹配简化的JSON（单行，无嵌套）
+                # 方法3: 尝试匹配包含所有字段的JSON
                 if not result_json:
-                    json_match = re.search(r'\{[^}]*"summary"[^}]*"source"[^}]*"region"[^}]*\}', result_text)
+                    json_match = re.search(r'\{[^}]*"summary"[^}]*"source"[^}]*"region"[^}]*"keywords"[^}]*\}', result_text, re.DOTALL)
                     if json_match:
-                        result_json = json.loads(json_match.group())
+                        try:
+                            result_json = json.loads(json_match.group())
+                        except:
+                            pass
                 
                 # 提取字段
                 if result_json and isinstance(result_json, dict):
-                    summary = result_json.get("summary", result_text)
+                    summary = result_json.get("summary", news.summary)
                     source = result_json.get("source", "")
                     region = result_json.get("region", "")
+                    keywords = result_json.get("keywords", [])
+                    
+                    # 确保keywords是列表
+                    if not isinstance(keywords, list):
+                        if isinstance(keywords, str):
+                            keywords = [k.strip() for k in keywords.split(',') if k.strip()]
+                        else:
+                            keywords = []
                 else:
-                    # 所有方法都失败，使用整个文本作为摘要
-                    summary = result_text.strip()
+                    # 所有方法都失败，使用默认值
+                    summary = news.summary
                     source = ""
                     region = ""
+                    keywords = []
                     
             except Exception as e:
-                print(f"解析JSON失败: {str(e)}, 使用原始文本")
-                summary = result_text.strip()
+                print(f"解析JSON失败: {str(e)}, 使用默认值")
+                summary = news.summary
                 source = ""
                 region = ""
+                keywords = []
             
-            # 更新新闻项的摘要、来源和地区
+            # 更新新闻项
             news.summary = summary
             news.source = source
             news.region = region
-            summarized_news.append(news)
+            news.keywords = keywords
+            enriched_news.append(news)
             
         except Exception as e:
-            # 如果生成摘要失败，保留原始摘要
-            print(f"生成摘要失败: {str(e)}, 使用原始摘要")
-            summarized_news.append(news)
+            # 如果丰富失败，保留原始新闻
+            print(f"丰富新闻失败: {str(e)}, 保留原始新闻")
+            enriched_news.append(news)
     
-    return GenerateSummaryOutput(summarized_news_list=summarized_news)
+    return EnrichNewsOutput(enriched_news_list=enriched_news)
 
 
 def extract_date_node(state: ExtractDateInput, config: RunnableConfig, runtime: Runtime[Context]) -> ExtractDateOutput:
@@ -435,138 +445,6 @@ def extract_date_node(state: ExtractDateInput, config: RunnableConfig, runtime: 
     print(f"日期过滤完成: 原始 {len(state.news_list)} 条，无日期 {no_date_count} 条，过期 {old_date_count} 条，保留 {len(filtered_news)} 条")
     
     return ExtractDateOutput(filtered_news_list=filtered_news)
-
-
-def extract_keywords_node(state: ExtractKeywordsInput, config: RunnableConfig, runtime: Runtime[Context]) -> ExtractKeywordsOutput:
-    """
-    title: 提取关键词
-    desc: 使用大语言模型为每条新闻提取关键词
-    integrations: 大语言模型
-    """
-    ctx = runtime.context
-    
-    # 检查是否为空列表
-    if not state.filtered_news_list:
-        print("新闻列表为空，跳过关键词提取")
-        return ExtractKeywordsOutput(enriched_news_list=[])
-    
-    # 读取配置文件
-    cfg_file = os.path.join(os.getenv("COZE_WORKSPACE_PATH"), config['metadata']['llm_cfg'])
-    with open(cfg_file, 'r') as fd:
-        _cfg = json.load(fd)
-    
-    llm_config = _cfg.get("config", {})
-    system_prompt = _cfg.get("sp", "")
-    user_prompt_template = _cfg.get("up", "")
-    
-    # 导入大语言模型调用
-    from langchain_openai import ChatOpenAI
-    from langchain_core.messages import SystemMessage, HumanMessage, BaseMessageChunk
-    from coze_coding_utils.runtime_ctx.context import default_headers
-    
-    api_key = os.getenv("COZE_WORKLOAD_IDENTITY_API_KEY")
-    base_url = os.getenv("COZE_INTEGRATION_MODEL_BASE_URL")
-    
-    enriched_news = []
-    
-    for news in state.filtered_news_list:
-        try:
-            # 渲染用户提示词
-            up_tpl = Template(user_prompt_template)
-            user_prompt = up_tpl.render({
-                "title": news.title,
-                "summary": news.summary,
-                "content": news.content
-            })
-            
-            # 调用大语言模型
-            llm = ChatOpenAI(
-                model=llm_config.get("model", "doubao-seed-1-6-251015"),
-                api_key=api_key,
-                base_url=base_url,
-                streaming=True,
-                extra_body={
-                    "thinking": {
-                        "type": "disabled"
-                    }
-                },
-                temperature=llm_config.get("temperature", 0.3),
-                max_tokens=llm_config.get("max_tokens", 500),
-                default_headers=default_headers(ctx),
-            )
-            
-            messages = [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=user_prompt)
-            ]
-            
-            # 收集流式输出
-            result_text = ""
-            for chunk in llm.stream(messages):
-                if isinstance(chunk.content, str):
-                    result_text += chunk.content
-                elif isinstance(chunk.content, list):
-                    for item in chunk.content:
-                        if isinstance(item, str):
-                            result_text += item
-            
-            # 解析结果 - 尝试提取JSON格式的关键词
-            try:
-                import re
-                
-                # 方法1: 尝试直接解析整个文本为JSON
-                result_json = None
-                try:
-                    result_json = json.loads(result_text.strip())
-                except:
-                    pass
-                
-                # 方法2: 如果直接解析失败，使用正则表达式提取JSON对象
-                if not result_json:
-                    # 查找第一个完整的JSON对象（支持跨行）
-                    json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', result_text, re.DOTALL)
-                    if json_match:
-                        try:
-                            result_json = json.loads(json_match.group())
-                        except:
-                            pass
-                
-                # 方法3: 尝试匹配简化的JSON（单行，无嵌套）
-                if not result_json:
-                    json_match = re.search(r'\{[^}]*"keywords"[^}]*\}', result_text)
-                    if json_match:
-                        result_json = json.loads(json_match.group())
-                
-                # 提取keywords字段
-                if result_json and isinstance(result_json, dict):
-                    keywords = result_json.get("keywords", [])
-                    if isinstance(keywords, list):
-                        # 确保keywords是列表
-                        pass
-                    elif isinstance(keywords, str):
-                        # 如果是字符串，尝试分割
-                        keywords = [k.strip() for k in keywords.split(',') if k.strip()]
-                    else:
-                        keywords = []
-                else:
-                    # 所有方法都失败，尝试从文本中提取关键词
-                    keywords = [kw.strip() for kw in result_text.split('，') if kw.strip()][:5]
-                    
-            except Exception as e:
-                print(f"解析关键词JSON失败: {str(e)}, 尝试文本提取")
-                # 如果JSON解析失败，尝试从文本中提取关键词
-                keywords = [kw.strip() for kw in result_text.split('，') if kw.strip()][:5]
-            
-            # 更新新闻项
-            news.keywords = keywords
-            enriched_news.append(news)
-            
-        except Exception as e:
-            # 如果提取失败，保留原始新闻
-            news.keywords = []
-            enriched_news.append(news)
-    
-    return ExtractKeywordsOutput(enriched_news_list=enriched_news)
 
 
 def create_table_node(state: CreateTableInput, config: RunnableConfig, runtime: Runtime[Context]) -> CreateTableOutput:
@@ -992,60 +870,6 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
             email_sent=False,
             email_message=f"发送邮件失败: {str(e)}"
         )
-
-
-def merge_news_info_node(state: MergeNewsInfoInput, config: RunnableConfig, runtime: Runtime[Context]) -> MergeNewsInfoOutput:
-    """
-    title: 合并新闻信息
-    desc: 将摘要生成和关键词提取的结果合并，确保每条新闻包含完整的摘要、关键词、来源和地区信息
-    """
-    ctx = runtime.context
-    
-    # 检查是否为空列表
-    if not state.summarized_news_list and not state.enriched_news_list:
-        print("新闻列表为空，跳过合并")
-        return MergeNewsInfoOutput(enriched_news_list=[])
-    
-    try:
-        # 创建一个URL到新闻的映射，方便快速查找
-        # 优先使用summarized_news_list中的数据（包含source和region）
-        summarized_map = {news.url: news for news in state.summarized_news_list}
-        
-        # 创建一个URL到关键词的映射
-        keywords_map = {news.url: news.keywords for news in state.enriched_news_list}
-        
-        # 合并结果
-        merged_news = []
-        
-        for url, summary_news in summarized_map.items():
-            # 复制摘要新闻（包含source和region）
-            merged_news_item = NewsItem(
-                title=summary_news.title,
-                date=summary_news.date,
-                url=summary_news.url,
-                summary=summary_news.summary,
-                source=summary_news.source,
-                region=summary_news.region,
-                keywords=[]  # 初始化为空
-            )
-            
-            # 如果关键词列表中有该新闻的关键词，则合并
-            if url in keywords_map:
-                merged_news_item.keywords = keywords_map[url]
-            else:
-                # 如果没有找到关键词，保持为空列表
-                merged_news_item.keywords = []
-            
-            merged_news.append(merged_news_item)
-        
-        print(f"合并完成: 共 {len(merged_news)} 条新闻")
-        print(f"摘要生成节点提供: {len(state.summarized_news_list)} 条")
-        print(f"关键词提取节点提供: {len(state.enriched_news_list)} 条")
-        
-        return MergeNewsInfoOutput(enriched_news_list=merged_news)
-        
-    except Exception as e:
-        raise Exception(f"合并新闻信息失败: {str(e)}")
 
 
 def save_news_history_node(state: SaveNewsHistoryInput, config: RunnableConfig, runtime: Runtime[Context]) -> SaveNewsHistoryOutput:

@@ -8,12 +8,10 @@ from graphs.node import (
     split_emails_node,
     fetch_news_node,
     deduplicate_news_node,
-    generate_summary_node,
+    enrich_news_node,
     extract_date_node,
-    extract_keywords_node,
     create_table_node,
     send_email_node,
-    merge_news_info_node,
     save_news_history_node
 )
 
@@ -24,10 +22,8 @@ builder = StateGraph(GlobalState, input_schema=GraphInput, output_schema=GraphOu
 builder.add_node("split_emails", split_emails_node, metadata={"type": "normal"})
 builder.add_node("fetch_news", fetch_news_node, metadata={"type": "normal"})
 builder.add_node("deduplicate_news", deduplicate_news_node, metadata={"type": "normal"})
-builder.add_node("generate_summary", generate_summary_node, metadata={"type": "agent", "llm_cfg": "config/generate_summary_llm_cfg.json"})
 builder.add_node("extract_date", extract_date_node, metadata={"type": "normal"})
-builder.add_node("extract_keywords", extract_keywords_node, metadata={"type": "agent", "llm_cfg": "config/extract_keywords_llm_cfg.json"})
-builder.add_node("merge_news_info", merge_news_info_node, metadata={"type": "normal"})
+builder.add_node("enrich_news", enrich_news_node, metadata={"type": "agent", "llm_cfg": "config/enrich_news_llm_cfg.json"})
 builder.add_node("create_table", create_table_node, metadata={"type": "normal"})
 builder.add_node("send_email", send_email_node, metadata={"type": "normal"})
 builder.add_node("save_news_history", save_news_history_node, metadata={"type": "normal"})
@@ -35,8 +31,8 @@ builder.add_node("save_news_history", save_news_history_node, metadata={"type": 
 # 设置入口点
 builder.set_entry_point("split_emails")
 
-# 添加边 - 并行工作流架构
-# split_emails -> (无依赖，只是设置 emails_list)
+# 添加边 - 线性工作流架构
+# split_emails -> fetch_news
 builder.add_edge("split_emails", "fetch_news")
 
 # fetch_news -> deduplicate_news（去重历史新闻）
@@ -45,15 +41,13 @@ builder.add_edge("fetch_news", "deduplicate_news")
 # deduplicate_news -> extract_date（提取日期）
 builder.add_edge("deduplicate_news", "extract_date")
 
-# extract_date 同时传给 generate_summary 和 extract_keywords（并行执行，提高效率）
-builder.add_edge("extract_date", "generate_summary")
-builder.add_edge("extract_date", "extract_keywords")
+# extract_date -> enrich_news（丰富新闻信息：摘要、关键词、来源、地区）
+builder.add_edge("extract_date", "enrich_news")
 
-# 并行分支汇聚：等待 generate_summary 和 extract_keywords 都完成后，执行 merge_news_info
-builder.add_edge(["generate_summary", "extract_keywords"], "merge_news_info")
+# enrich_news -> create_table
+builder.add_edge("enrich_news", "create_table")
 
-# 后续流程
-builder.add_edge("merge_news_info", "create_table")
+# create_table -> send_email
 builder.add_edge("create_table", "send_email")
 
 # send_email -> save_news_history（保存历史记录） -> END
