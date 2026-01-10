@@ -901,13 +901,16 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
         failed_emails = []
         
         # 为每个收件人单独发送邮件
-        for recipient_email in state.emails_list:
+        for idx, recipient_email in enumerate(state.emails_list):
             try:
+                # 判断是否为第一个收件人（只有第一个收件人才发送附件）
+                is_first_recipient = (idx == 0)
+                
                 # 创建邮件
                 if has_news:
                     # 有新闻时，创建多部分邮件（HTML + 附件）
                     msg = MIMEMultipart()
-                    msg["From"] = formataddr(("新闻收集助手", email_config["account"]))
+                    msg["From"] = formataddr(("Huxg", email_config["account"]))
                     msg["To"] = recipient_email  # 只显示一个收件地址
                     msg["Subject"] = Header(f"医疗器械医美新闻汇总 - {today}", 'utf-8')
                     msg["Date"] = formatdate(localtime=True)
@@ -916,20 +919,22 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
                     # 添加HTML正文
                     msg.attach(MIMEText(html_content, 'html', 'utf-8'))
                     
-                    # 添加Excel附件
-                    part = MIMEBase('application', 'octet-stream')
-                    part.set_payload(file_content)
-                    
-                    encoders.encode_base64(part)
-                    part.add_header(
-                        'Content-Disposition',
-                        f'attachment; filename="{Header(state.table_filename, "utf-8").encode()}'
-                    )
-                    msg.attach(part)
+                    # 只有第一个收件人才添加Excel附件
+                    if is_first_recipient:
+                        # 添加Excel附件
+                        part = MIMEBase('application', 'octet-stream')
+                        part.set_payload(file_content)
+                        
+                        encoders.encode_base64(part)
+                        part.add_header(
+                            'Content-Disposition',
+                            f'attachment; filename="{Header(state.table_filename, "utf-8").encode()}'
+                        )
+                        msg.attach(part)
                 else:
                     # 没有新闻时，只发送HTML通知邮件
                     msg = MIMEText(html_content, 'html', 'utf-8')
-                    msg["From"] = formataddr(("新闻收集助手", email_config["account"]))
+                    msg["From"] = formataddr(("Huxg", email_config["account"]))
                     msg["To"] = recipient_email
                     msg["Subject"] = Header(f"新闻汇总 - {today}（无新新闻）", 'utf-8')
                     msg["Date"] = formatdate(localtime=True)
@@ -952,7 +957,12 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
                     server.quit()
                 
                 success_count += 1
-                print(f"✅ 邮件已成功发送到: {recipient_email}")
+                if has_news and is_first_recipient:
+                    print(f"✅ 邮件已成功发送到: {recipient_email}（含附件）")
+                elif has_news:
+                    print(f"✅ 邮件已成功发送到: {recipient_email}（无附件）")
+                else:
+                    print(f"✅ 邮件已成功发送到: {recipient_email}")
                 
             except Exception as e:
                 print(f"❌ 发送到 {recipient_email} 失败: {str(e)}")
@@ -964,7 +974,7 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
                 message = f"邮件已成功发送到 {success_count} 个收件人。失败的邮箱: {', '.join(failed_emails)}"
             else:
                 if has_news:
-                    message = f"邮件已成功发送到所有 {success_count} 个收件人，包含 {len(state.enriched_news_list)} 条新闻及Excel附件"
+                    message = f"邮件已成功发送到所有 {success_count} 个收件人，包含 {len(state.enriched_news_list)} 条新闻（仅第一个邮箱含Excel附件）"
                 else:
                     message = f"已成功发送通知邮件到所有 {success_count} 个收件人（今日无新新闻）"
             return SendEmailOutput(
