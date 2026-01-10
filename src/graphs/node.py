@@ -45,9 +45,46 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
     from tools.web_search_tool import web_search
     
     news_list = []
-    
-    # 定义目标新闻来源域名
-    target_sites = "toutiao.com|sohu.com|qq.com|163.com|ifeng.com|thepaper.cn|finance.sina.com.cn|sina.com.cn|ylqx.qgyyzs.net|camdi.cn|qxw18.com|cctv.com"
+
+    print("========================================")
+    print("开始执行新闻搜索节点")
+    print("========================================")
+
+    # 尝试最简单的搜索，先验证搜索功能是否正常
+    print("\n[测试] 尝试简单搜索，验证搜索功能...")
+    try:
+        test_web_items, test_summary, test_image_items, test_result = web_search(
+            ctx=ctx,
+            query="新闻",
+            search_type="web",
+            count=2,
+            need_summary=True,
+            need_content=True
+        )
+        print(f"[测试结果] 简单搜索成功！获取到 {len(test_web_items)} 条新闻")
+        if test_web_items:
+            print(f"[测试结果] 第一条标题: {test_web_items[0].Title}")
+    except Exception as e:
+        print(f"[测试失败] 简单搜索失败: {str(e)}")
+        import traceback
+        print(f"[错误详情] {traceback.format_exc()}")
+
+    # 定义目标新闻来源域名（注意：搜索API最多支持5个域名，需要分批搜索）
+    # 第一批：主流媒体
+    target_sites_batch1 = "toutiao.com|sohu.com|qq.com|163.com|ifeng.com"
+    # 第二批：专业和权威媒体
+    target_sites_batch2 = "thepaper.cn|sina.com.cn|cctv.com|finance.sina.com.cn|camdi.cn"
+    # 第三批：专业媒体（注意：ylqx.qgyyzs.net和qxw18.com可能被限制）
+    target_sites_batch3 = "ylqx.qgyyzs.net|qxw18.com"
+
+    # 将所有批次组合成列表，方便迭代
+    all_target_sites = [target_sites_batch1, target_sites_batch2, target_sites_batch3]
+
+    # 添加一个不带域名限制的搜索，作为备用方案
+    print(f"\n开始搜索新闻，目标网站批次:")
+    for idx, sites in enumerate(all_target_sites, 1):
+        print(f"  批次{idx}: {sites}")
+    print(f"  备用: 不限制域名（通用搜索）")
     
     # 构建核心搜索词列表（确保获取的新闻主体内容与医疗器械、医美相关）
     medical_device_queries = [
@@ -73,23 +110,31 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
     ]
     
     try:
-        # 并行搜索所有医疗器械相关查询
+        # 首先进行一次通用搜索，不限制域名和时间范围
+        print("\n========================================")
+        print("开始执行新闻搜索节点")
+        print("========================================")
+
+        # 使用更广泛的搜索词，不限制域名
+        general_queries = ["新闻", "医疗", "医疗器械", "医美", "医疗设备"]
+
+        print(f"\n开始通用搜索，搜索词: {general_queries}")
+
         all_web_items = []
         search_success_count = 0
         search_fail_count = 0
-        
-        print(f"开始搜索新闻，目标网站: {target_sites}")
-        
-        for query in medical_device_queries:
+
+        for query in general_queries:
             try:
-                web_items, _, _, _ = web_search(
+                web_items, summary, image_items, result = web_search(
                     ctx=ctx,
                     query=query,
                     search_type="web",
-                    count=10,
+                    count=20,
                     need_summary=True,
                     need_content=True,
-                    sites=target_sites
+                    sites=None  # 不限制域名
+                    # 暂时不设置time_range，看看能否获取到结果
                 )
                 all_web_items.extend(web_items)
                 search_success_count += 1
@@ -97,28 +142,72 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
             except Exception as e:
                 search_fail_count += 1
                 print(f"[失败] 搜索 '{query}' 失败: {str(e)}")
+                import traceback
+                print(f"[错误详情] {traceback.format_exc()}")
                 continue
-        
-        for query in medical_beauty_queries:
-            try:
-                web_items, _, _, _ = web_search(
-                    ctx=ctx,
-                    query=query,
-                    search_type="web",
-                    count=10,
-                    need_summary=True,
-                    need_content=True,
-                    sites=target_sites
-                )
-                all_web_items.extend(web_items)
-                search_success_count += 1
-                print(f"[成功] 搜索 '{query}' 获取到 {len(web_items)} 条新闻")
-            except Exception as e:
-                search_fail_count += 1
-                print(f"[失败] 搜索 '{query}' 失败: {str(e)}")
-                continue
-        
-        print(f"搜索完成: 成功 {search_success_count} 个查询，失败 {search_fail_count} 个查询")
+
+        print(f"\n通用搜索完成: 成功 {search_success_count} 个查询，失败 {search_fail_count} 个查询")
+        print(f"总共获取到 {len(all_web_items)} 条原始新闻")
+
+        # 如果通用搜索获取到了新闻，再尝试按域名搜索
+        if len(all_web_items) > 0:
+            print(f"\n=== 通用搜索已获取新闻，跳过域名限制搜索 ===")
+
+        # 分批搜索所有来源（只作为补充）
+        for batch_idx, target_sites in enumerate(all_target_sites, 1):
+            print(f"\n=== 开始搜索批次 {batch_idx}/{len(all_target_sites)} ===")
+            print(f"目标网站: {target_sites}")
+
+            # 搜索医疗器械相关查询（限制最近一个月的新闻）
+            for query in medical_device_queries:
+                try:
+                    web_items, summary, image_items, result = web_search(
+                        ctx=ctx,
+                        query=query,
+                        search_type="web",
+                        count=10,
+                        need_summary=True,
+                        need_content=True,
+                        sites=target_sites,
+                        time_range="OneMonth"  # 限制最近一个月的新闻
+                    )
+                    print(f"[调试] 批次{batch_idx} 搜索 '{query}' 返回数据: web_items={len(web_items)}, summary={bool(summary)}, image_items={len(image_items) if image_items else 0}")
+                    all_web_items.extend(web_items)
+                    search_success_count += 1
+                    print(f"[成功] 批次{batch_idx} 搜索 '{query}' 获取到 {len(web_items)} 条新闻")
+                except Exception as e:
+                    search_fail_count += 1
+                    print(f"[失败] 批次{batch_idx} 搜索 '{query}' 失败: {str(e)}")
+                    import traceback
+                    print(f"[错误详情] {traceback.format_exc()}")
+                    continue
+
+            # 搜索医美相关查询（限制最近一个月的新闻）
+            for query in medical_beauty_queries:
+                try:
+                    web_items, summary, image_items, result = web_search(
+                        ctx=ctx,
+                        query=query,
+                        search_type="web",
+                        count=10,
+                        need_summary=True,
+                        need_content=True,
+                        sites=target_sites,
+                        time_range="OneMonth"  # 限制最近一个月的新闻
+                    )
+                    print(f"[调试] 批次{batch_idx} 搜索 '{query}' 返回数据: web_items={len(web_items)}, summary={bool(summary)}, image_items={len(image_items) if image_items else 0}")
+                    all_web_items.extend(web_items)
+                    search_success_count += 1
+                    print(f"[成功] 批次{batch_idx} 搜索 '{query}' 获取到 {len(web_items)} 条新闻")
+                except Exception as e:
+                    search_fail_count += 1
+                    print(f"[失败] 批次{batch_idx} 搜索 '{query}' 失败: {str(e)}")
+                    import traceback
+                    print(f"[错误详情] {traceback.format_exc()}")
+                    continue
+
+        print(f"\n=== 所有批次搜索完成 ===")
+        print(f"总计成功: {search_success_count} 个查询，失败: {search_fail_count} 个查询")
         print(f"总共获取到 {len(all_web_items)} 条原始新闻")
         
         # 如果没有获取到任何新闻，打印警告
