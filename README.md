@@ -12,11 +12,98 @@ bash scripts/http_run.sh -m http -p 5000
 
 # GitHub 部署指南
 
+## 部署架构说明
+
+本项目支持两种部署方式：
+
+### 方式 1：GitHub Actions + Coze API（推荐）🚀
+
+**架构**：GitHub Actions 通过 HTTP API 调用部署在 Coze 平台上的工作流
+
+**优点**：
+- 配置简单，只需配置 Coze API Token 和 Workflow ID
+- 工作流在 Coze 平台运行，无需管理复杂的环境变量
+- 利用 Coze 平台的自动 Token 注入机制
+- 工作流修改即时生效
+
+**适用场景**：大多数用户，希望快速部署和简单维护
+
+**配置步骤**：
+1. 在 Coze 平台部署工作流
+2. 获取 Coze API Token 和 Workflow ID
+3. 在 GitHub Secrets 中配置 Token
+4. 推送代码到 GitHub
+
+**详细文档**：[Coze API 配置指南](docs/COZE_API_SETUP.md)
+
+---
+
+### 方式 2：GitHub Actions 本地运行
+
+**架构**：GitHub Actions 直接运行本地代码
+
+**优点**：
+- 完全控制代码和执行环境
+- 不依赖 Coze 平台
+
+**缺点**：
+- 需要配置 Coze API Key 等多个环境变量
+- 配置复杂，易出错
+
+**适用场景**：需要完全控制执行环境的高级用户
+
+---
+
 ## 方式 1: 使用 API 部署（推荐）🚀
 
 ### 快速开始
 
-1. **获取 Personal Access Token**
+1. **获取 Coze API Token**
+   - 登录 [Coze 平台](https://www.coze.cn)
+   - 进入工作空间设置，生成 API Token
+   - 详细步骤：[Coze API 配置指南](docs/COZE_API_SETUP.md)
+
+2. **获取工作流 ID**
+   - 在 Coze 平台打开你的工作流
+   - 从 URL 或 API 文档中获取 Workflow ID
+   - 详细步骤：[Coze API 配置指南](docs/COZE_API_SETUP.md)
+
+3. **推送到 GitHub**
+
+   **获取 GitHub Personal Access Token**（用于推送代码）：
+   - 访问 https://github.com/settings/tokens
+   - 创建新 Token，勾选 `repo` 权限
+   - 详细步骤：[Token 获取指南](docs/GITHUB_TOKEN_GUIDE.md)
+
+   **执行部署命令**：
+   ```bash
+   pip install requests cryptography  # 首次需要
+
+   python scripts/deploy_via_api.py \
+       --token ghp_xxxxxxxxxxxx \
+       --username your-username \
+       --repo news-bot
+   ```
+
+4. **配置 GitHub Secrets**
+   - 进入仓库 Settings → Secrets and variables → Actions
+   - 添加以下 Secrets：
+     - `COZE_API_TOKEN`: Coze API Token
+     - `COZE_WORKFLOW_ID`: 工作流 ID
+     - `EMAILS`: 接收邮件的邮箱地址
+
+### 验证部署
+
+1. 进入仓库的 "Actions" 标签
+2. 点击 "News Collection Workflow"
+3. 点击 "Run workflow" 手动触发测试
+4. 查看执行日志和邮箱收件情况
+
+---
+
+## 方式 2: 传统方式部署（不推荐）
+
+### 步骤 1: 获取 GitHub Personal Access Token
    - 访问 https://github.com/settings/tokens
    - 创建新 Token，勾选 `repo` 权限
    - 详细步骤：[Token 获取指南](docs/GITHUB_TOKEN_GUIDE.md)

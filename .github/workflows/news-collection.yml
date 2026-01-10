@@ -19,42 +19,137 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      
-      - name: Run news collection workflow
+      - name: Call Coze API to trigger workflow
         env:
-          # 从环境变量或手动输入获取邮箱地址
+          # Coze API 配置
+          COZE_API_TOKEN: ${{ secrets.COZE_API_TOKEN }}
+          COZE_WORKFLOW_ID: ${{ secrets.COZE_WORKFLOW_ID }}
+          COZE_API_BASE_URL: ${{ secrets.COZE_API_BASE_URL || 'https://api.coze.cn' }}
+          # 工作流输入参数
           EMAILS: ${{ github.event.inputs.emails || secrets.EMAILS }}
-          # 其他必要的环境变量
-          COZE_WORKSPACE_PATH: ${{ github.workspace }}
         run: |
-          # 如果没有提供邮箱地址，使用默认值
-          if [ -z "$EMAILS" ]; then
-            echo "错误：请设置 EMAILS 环境变量或在手动触发时提供邮箱地址"
+          set -e  # 遇到错误立即退出
+
+          echo "=========================================="
+          echo "Coze API 调用配置"
+          echo "=========================================="
+          echo "API Base URL: ${COZE_API_BASE_URL}"
+          echo "Workflow ID: ${COZE_WORKFLOW_ID}"
+          echo "接收邮箱: ${EMAILS}"
+          echo "=========================================="
+
+          # 验证必需的环境变量
+          if [ -z "$COZE_API_TOKEN" ]; then
+            echo "❌ 错误：未设置 COZE_API_TOKEN 环境变量"
+            echo "请在 GitHub Secrets 中配置 COZE_API_TOKEN"
             exit 1
           fi
-          
-          echo "开始收集新闻，发送到: $EMAILS"
-          
-          # 运行主程序
-          python src/main.py --emails "$EMAILS"
-      
-      - name: Upload logs (if exists)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: workflow-logs
-          path: |
-            logs/*.log
-          retention-days: 30
+
+          if [ -z "$COZE_WORKFLOW_ID" ]; then
+            echo "❌ 错误：未设置 COZE_WORKFLOW_ID 环境变量"
+            echo "请在 GitHub Secrets 中配置 COZE_WORKFLOW_ID"
+            exit 1
+          fi
+
+          if [ -z "$EMAILS" ]; then
+            echo "❌ 错误：未设置 EMAILS 环境变量"
+            echo "请在 GitHub Secrets 中配置 EMAILS，或在手动触发时提供邮箱地址"
+            exit 1
+          fi
+
+          echo ""
+          echo "🚀 开始调用 Coze API..."
+          echo ""
+
+          # 调用 Coze API 触发工作流
+          RESPONSE=$(curl -s -X POST "${COZE_API_BASE_URL}/v1/workflow/run" \
+            -H "Authorization: Bearer ${COZE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"workflow_id\": \"${COZE_WORKFLOW_ID}\",
+              \"parameters\": {
+                \"emails\": \"${EMAILS}\"
+              },
+              \"stream\": false
+            }")
+
+          echo "API 响应："
+          echo "${RESPONSE}" | jq '.'
+
+          # 检查 API 调用是否成功
+          STATUS=$(echo "${RESPONSE}" | jq -r '.code // empty')
+
+          if [ "$STATUS" != "0" ] && [ -n "$STATUS" ]; then
+            echo ""
+            echo "❌ API 调用失败"
+            echo "错误代码: ${STATUS}"
+            echo "错误信息: $(echo "${RESPONSE}" | jq -r '.msg // .message // .error // empty')"
+            exit 1
+          fi
+
+          # 检查是否有返回结果
+          JOB_ID=$(echo "${RESPONSE}" | jq -r '.data.id // .data.job_id // empty')
+
+          if [ -n "$JOB_ID" ]; then
+            echo ""
+            echo "✅ 工作流已成功触发"
+            echo "Job ID: ${JOB_ID}"
+            echo "等待工作流执行完成..."
+
+            # 轮询工作流状态
+            MAX_WAIT=900  # 最多等待 15 分钟
+            WAIT_INTERVAL=10  # 每 10 秒检查一次
+            ELAPSED=0
+
+            while [ $ELAPSED -lt $MAX_WAIT ]; do
+              sleep $WAIT_INTERVAL
+              ELAPSED=$((ELAPSED + WAIT_INTERVAL))
+
+              STATUS_RESPONSE=$(curl -s -X GET "${COZE_API_BASE_URL}/v1/workflow/jobs/${JOB_ID}" \
+                -H "Authorization: Bearer ${COZE_API_TOKEN}")
+
+              JOB_STATUS=$(echo "${STATUS_RESPONSE}" | jq -r '.data.status // empty')
+
+              echo "[$(date +'%H:%M:%S')] 工作流状态: ${JOB_STATUS}"
+
+              if [ "$JOB_STATUS" = "succeeded" ]; then
+                echo ""
+                echo "✅ 工作流执行成功"
+                echo ""
+                echo "最终结果："
+                echo "${STATUS_RESPONSE}" | jq '.data.outputs // .data.result // empty'
+                break
+              elif [ "$JOB_STATUS" = "failed" ]; then
+                echo ""
+                echo "❌ 工作流执行失败"
+                echo "错误信息："
+                echo "${STATUS_RESPONSE}" | jq '.data.error // .data.outputs // empty'
+                exit 1
+              elif [ "$JOB_STATUS" = "running" ] || [ "$JOB_STATUS" = "pending" ]; then
+                echo "⏳ 工作流执行中..."
+                continue
+              else
+                echo "⚠️  未知状态: ${JOB_STATUS}"
+                echo "状态详情："
+                echo "${STATUS_RESPONSE}"
+                exit 1
+              fi
+            done
+
+            if [ $ELAPSED -ge $MAX_WAIT ]; then
+              echo ""
+              echo "⚠️  工作流执行超时（超过 ${MAX_WAIT} 秒）"
+              echo "工作流仍在后台运行，Job ID: ${JOB_ID}"
+              exit 1
+            fi
+          else
+            echo ""
+            echo "⚠️  未能获取 Job ID，可能工作流已同步返回结果"
+            echo "最终输出："
+            echo "${RESPONSE}" | jq '.data.outputs // .data.result // .data // empty'
+          fi
+
+          echo ""
+          echo "=========================================="
+          echo "🎉 任务完成！"
+          echo "=========================================="
