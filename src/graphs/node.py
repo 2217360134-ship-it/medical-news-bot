@@ -36,28 +36,19 @@ def split_emails_node(state: SplitEmailsInput, config: RunnableConfig, runtime: 
 def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runtime[Context]) -> FetchNewsOutput:
     """
     title: 获取指定来源新闻
-    desc: 从用户选择的新闻来源网站获取医疗器械和医美相关的新闻
+    desc: 从今日头条、搜狐、腾讯网、网易新闻、凤凰网获取医疗器械和医美相关的新闻
     integrations: 联网搜索
     """
     ctx = runtime.context
-
+    
     # 导入网络搜索函数
     from tools.web_search_tool import web_search
-
+    
     news_list = []
-
-    # 使用用户选择的网站列表
-    selected_sites_list = state.selected_sites
-    if not selected_sites_list:
-        print("❌ 错误: 没有选择任何新闻来源网站")
-        return FetchNewsOutput(news_list=[])
-
-    # 构建目标网站域名过滤字符串
-    target_sites = "|".join(selected_sites_list)
-
-    print(f"用户选择的新闻来源网站: {selected_sites_list}")
-    print(f"目标网站过滤: {target_sites}")
-
+    
+    # 定义目标新闻来源域名
+    target_sites = "toutiao.com|sohu.com|qq.com|163.com|ifeng.com|thepaper.cn|finance.sina.com.cn|sina.com.cn|ylqx.qgyyzs.net|camdi.cn|qxw18.com|cctv.com"
+    
     # 构建核心搜索词列表（确保获取的新闻主体内容与医疗器械、医美相关）
     medical_device_queries = [
         "医疗器械公司",
@@ -69,7 +60,7 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
         "医疗器械融资",
         "医疗器械上市"
     ]
-
+    
     medical_beauty_queries = [
         "医美公司",
         "医美产品",
@@ -80,15 +71,15 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
         "医美融资",
         "医美上市"
     ]
-
+    
     try:
         # 并行搜索所有医疗器械相关查询
         all_web_items = []
         search_success_count = 0
         search_fail_count = 0
-
+        
         print(f"开始搜索新闻，目标网站: {target_sites}")
-
+        
         for query in medical_device_queries:
             try:
                 web_items, _, _, _ = web_search(
@@ -107,7 +98,7 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
                 search_fail_count += 1
                 print(f"[失败] 搜索 '{query}' 失败: {str(e)}")
                 continue
-
+        
         for query in medical_beauty_queries:
             try:
                 web_items, _, _, _ = web_search(
@@ -126,24 +117,23 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
                 search_fail_count += 1
                 print(f"[失败] 搜索 '{query}' 失败: {str(e)}")
                 continue
-
+        
         print(f"搜索完成: 成功 {search_success_count} 个查询，失败 {search_fail_count} 个查询")
         print(f"总共获取到 {len(all_web_items)} 条原始新闻")
-
+        
         # 如果没有获取到任何新闻，打印警告
         if not all_web_items:
             print("⚠️ 警告: 所有搜索查询都没有获取到新闻！")
             print("可能的原因:")
             print("  1. 网络搜索服务暂时不可用")
-            print("  2. 选定的网站没有相关新闻")
+            print("  2. 目标网站没有相关新闻")
             print("  3. 搜索词需要调整")
-            print("  4. 建议尝试选择其他网站")
-
+        
         # 转换为NewsItem格式
         for item in all_web_items:
             if not item.Url:
                 continue
-
+            
             # 解析日期，如果PublishTime为空则使用当前日期
             if item.PublishTime:
                 try:
@@ -153,7 +143,7 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
                     publish_date = datetime.now().strftime('%Y-%m-%d')
             else:
                 publish_date = datetime.now().strftime('%Y-%m-%d')
-
+            
             news_item = NewsItem(
                 title=item.Title or "",
                 date=publish_date,
@@ -163,7 +153,7 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
                 keywords=[]
             )
             news_list.append(news_item)
-
+        
         # 去重逻辑
         # 1. 根据URL去重
         seen_urls = set()
@@ -172,7 +162,7 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
             if news.url not in seen_urls:
                 seen_urls.add(news.url)
                 unique_by_url.append(news)
-
+        
         # 2. 根据标题相似度去重（避免不同网站的相同新闻）
         seen_titles = set()
         final_news = []
@@ -182,13 +172,13 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
             # 移除一些常见的网站名称后缀
             for suffix in ['| toutiao', '- 今日头条', '_头条', '_新闻', '_资讯']:
                 normalized_title = normalized_title.replace(suffix.lower(), '')
-
+            
             if normalized_title not in seen_titles:
                 seen_titles.add(normalized_title)
                 final_news.append(news)
-
+        
         return FetchNewsOutput(news_list=final_news)
-
+        
     except Exception as e:
         raise Exception(f"获取新闻失败: {str(e)}")
 
@@ -665,14 +655,12 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
             </body>
             </html>
             """
-
+            
             # 读取Excel文件内容
             with open(state.table_filepath, 'rb') as f:
                 file_content = f.read()
         else:
             # 没有新闻时，构建通知邮件
-            print("🔨 开始构建无新闻通知邮件的HTML内容...")
-
             html_content = f"""
             <html>
             <head>
@@ -690,7 +678,7 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
                         <h2>医疗器械医美新闻汇总</h2>
                         <p>日期: {today}</p>
                     </div>
-
+                    
                     <div class="notice">
                         <h3>⚠️ 今日未收集到新新闻</h3>
                         <p>可能的原因：</p>
@@ -702,7 +690,7 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
                         <p><strong>工作流已正常运行，请勿担心。</strong></p>
                         <p>建议：明天再检查一次，或联系管理员。</p>
                     </div>
-
+                    
                     <div class="footer">
                         <p>此邮件由新闻收集助手自动发送</p>
                         <p>如有问题，请联系管理员</p>
@@ -711,79 +699,112 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
             </body>
             </html>
             """
-
-            print(f"✅ HTML内容构建完成，长度: {len(html_content)}")
-            print(f"HTML内容前100字符: {html_content[:100]}")
-
+        
+        # 构建邮件内容（HTML格式）
+        from datetime import datetime
+        today = datetime.now().strftime("%Y-%m-%d")
+        
+        html_content = f"""
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 800px; margin: 0 auto; padding: 20px; }}
+                .header {{ background-color: #4CAF50; color: white; padding: 20px; text-align: center; }}
+                .summary {{ background-color: #f8f8f8; padding: 15px; border-radius: 5px; margin: 20px 0; }}
+                .attachment-note {{ background-color: #fff3cd; border: 1px solid #ffeeba; padding: 15px; border-radius: 5px; margin: 20px 0; text-align: center; }}
+                .news-item {{ border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px; }}
+                .news-item:hover {{ box-shadow: 0 2px 5px rgba(0,0,0,0.1); }}
+                .news-title {{ font-size: 18px; font-weight: bold; margin-bottom: 10px; color: #2c3e50; }}
+                .news-meta {{ color: #666; font-size: 14px; margin-bottom: 10px; }}
+                .news-summary {{ margin-bottom: 10px; }}
+                .news-keywords {{ color: #e74c3c; font-size: 14px; }}
+                .news-link {{ color: #3498db; text-decoration: none; }}
+                .news-link:hover {{ text-decoration: underline; }}
+                .footer {{ text-align: center; margin-top: 30px; color: #999; font-size: 12px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h2>医疗器械医美新闻汇总</h2>
+                    <p>日期: {today}</p>
+                </div>
+                
+                <div class="attachment-note">
+                    <p><strong>📎 详细数据已作为附件发送</strong></p>
+                    <p>附件文件: {state.table_filename}</p>
+                    <p>包含 {len(state.enriched_news_list)} 条新闻记录</p>
+                </div>
+                
+                <div class="summary">
+                    <p><strong>共收集到 {len(state.enriched_news_list)} 条相关新闻</strong></p>
+                    <p>来源: 今日头条、搜狐、人民网、新华网、央视网</p>
+                </div>
+        """
+        
+        # 添加每条新闻
+        for idx, news in enumerate(state.enriched_news_list, 1):
+            keywords_str = ", ".join(news.keywords) if news.keywords else "无"
+            source_str = news.source if news.source else "未知"
+            region_str = news.region if news.region else "-"
+            html_content += f"""
+                <div class="news-item">
+                    <div class="news-title">{idx}. {news.title}</div>
+                    <div class="news-meta">
+                        <strong>日期:</strong> {news.date} |
+                        <strong>来源:</strong> {source_str} |
+                        <strong>地区:</strong> {region_str} |
+                        <strong>关键词:</strong> <span class="news-keywords">{keywords_str}</span>
+                    </div>
+                    <div class="news-summary">
+                        <strong>摘要:</strong> {news.summary}
+                    </div>
+                    <div>
+                        <a href="{news.url}" class="news-link">查看原文 &rarr;</a>
+                    </div>
+                </div>
+            """
+        
+        html_content += f"""
+                <div class="footer">
+                    <p>此邮件由新闻收集助手自动发送</p>
+                    <p>如有问题，请联系管理员</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
         # 分别发送给每个收件人
         success_count = 0
         failed_emails = []
-
-        # 调试：检查html_content是否正确构建
-        print(f"邮件HTML内容长度: {len(html_content)}")
-        print(f"HTML内容前200字符: {html_content[:200]}")
-
+        
         # 为每个收件人单独发送邮件
         for idx, recipient_email in enumerate(state.emails_list):
             try:
                 # 判断是否为第一个收件人（只有第一个收件人才发送附件）
                 is_first_recipient = (idx == 0)
-
+                
                 # 创建邮件
                 if has_news:
-                    # 有新闻时，创建多部分邮件（HTML + 附件 + 纯文本）
-                    msg = MIMEMultipart('mixed')
+                    # 有新闻时，创建多部分邮件（HTML + 附件）
+                    msg = MIMEMultipart()
                     msg["From"] = formataddr(("Huxg", email_config["account"]))
                     msg["To"] = recipient_email  # 只显示一个收件地址
                     msg["Subject"] = Header(f"医疗器械医美新闻汇总 - {today}", 'utf-8')
                     msg["Date"] = formatdate(localtime=True)
                     msg["Message-ID"] = make_msgid()
-
-                    # 创建多部分alternative（HTML + 纯文本）
-                    alternative_part = MIMEMultipart('alternative')
-
-                    # 构建纯文本版本
-                    text_content = f"""医疗器械医美新闻汇总
-日期: {today}
-
-📎 详细数据已作为附件发送
-附件文件: {state.table_filename}
-包含 {len(state.enriched_news_list)} 条新闻记录
-
-共收集到 {len(state.enriched_news_list)} 条相关新闻
-来源: 网络搜集
-
-"""
-                    # 添加每条新闻到纯文本版本
-                    for idx, news in enumerate(state.enriched_news_list, 1):
-                        keywords_str = ", ".join(news.keywords) if news.keywords else "无"
-                        source_str = news.source if news.source else "未知"
-                        region_str = news.region if news.region else "-"
-                        text_content += f"""
-{idx}. {news.title}
-日期: {news.date} | 来源: {source_str} | 地区: {region_str}
-关键词: {keywords_str}
-摘要: {news.summary}
-链接: {news.url}
-
-"""
-
-                    text_content += """
-此邮件由新闻收集助手自动发送
-如有问题，请联系管理员
-"""
-
-                    alternative_part.attach(MIMEText(text_content, 'plain', 'utf-8'))
-                    alternative_part.attach(MIMEText(html_content, 'html', 'utf-8'))
-
-                    msg.attach(alternative_part)
-
+                    
+                    # 添加HTML正文
+                    msg.attach(MIMEText(html_content, 'html', 'utf-8'))
+                    
                     # 只有第一个收件人才添加Excel附件
                     if is_first_recipient:
                         # 添加Excel附件
                         part = MIMEBase('application', 'octet-stream')
                         part.set_payload(file_content)
-
+                        
                         encoders.encode_base64(part)
                         part.add_header(
                             'Content-Disposition',
@@ -792,41 +813,12 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
                         msg.attach(part)
                 else:
                     # 没有新闻时，只发送HTML通知邮件
-                    # 构建纯文本内容作为备用
-                    text_content = f"""医疗器械医美新闻汇总
-日期: {today}
-
-⚠️ 今日未收集到新新闻
-
-可能的原因：
-- 今日无医疗器械或医美相关新闻
-- 所有新闻已在之前发送过（已去重）
-- 网络搜索服务暂时不可用
-
-工作流已正常运行，请勿担心。
-建议：明天再检查一次，或联系管理员。
-
-此邮件由新闻收集助手自动发送
-如有问题，请联系管理员
-"""
-
-                    # 创建多部分邮件（HTML + 纯文本）
-                    msg = MIMEMultipart('alternative')
+                    msg = MIMEText(html_content, 'html', 'utf-8')
                     msg["From"] = formataddr(("Huxg", email_config["account"]))
                     msg["To"] = recipient_email
                     msg["Subject"] = Header(f"新闻汇总 - {today}（无新新闻）", 'utf-8')
                     msg["Date"] = formatdate(localtime=True)
                     msg["Message-ID"] = make_msgid()
-
-                    # 添加纯文本版本
-                    part_text = MIMEText(text_content, 'plain', 'utf-8')
-                    msg.attach(part_text)
-
-                    # 添加HTML版本
-                    part_html = MIMEText(html_content, 'html', 'utf-8')
-                    msg.attach(part_html)
-
-                    print(f"✅ 邮件对象创建成功，包含HTML和纯文本两个版本")
                 
                 # 发送邮件
                 ctx_ssl = ssl.create_default_context()
