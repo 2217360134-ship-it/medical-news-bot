@@ -24,11 +24,16 @@ from jinja2 import Template
 def split_emails_node(state: SplitEmailsInput, config: RunnableConfig, runtime: Runtime[Context]) -> SplitEmailsOutput:
     """
     title: 分割邮箱地址
-    desc: 将逗号分隔的邮箱字符串分割成列表，支持逗号、分号、空格等分隔符
+    desc: 将逗号分隔的邮箱字符串分割成列表，支持逗号、分号、空格等分隔符，最多支持5个邮箱
     """
     # 将emails字符串分割成列表（支持逗号、分号、空格分隔）
     emails_str = state.emails or ""
     emails_list = [email.strip() for email in emails_str.replace(';', ',').replace(' ', ',').split(',') if email.strip()]
+    
+    # 限制收件人数量最多为5个
+    if len(emails_list) > 5:
+        print(f"⚠️ 警告: 收件人数量超过5个，只保留前5个")
+        emails_list = emails_list[:5]
     
     print(f"分割后的邮箱列表: {emails_list}")
     
@@ -901,13 +906,13 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
         failed_emails = []
         
         # 为每个收件人单独发送邮件
-        for recipient_email in state.emails_list:
+        for index, recipient_email in enumerate(state.emails_list):
             try:
                 # 创建邮件
                 if has_news:
                     # 有新闻时，创建多部分邮件（HTML + 附件）
                     msg = MIMEMultipart()
-                    msg["From"] = formataddr(("新闻收集助手", email_config["account"]))
+                    msg["From"] = formataddr(("Huxg", email_config["account"]))
                     msg["To"] = recipient_email  # 只显示一个收件地址
                     msg["Subject"] = Header(f"医疗器械医美新闻汇总 - {today}", 'utf-8')
                     msg["Date"] = formatdate(localtime=True)
@@ -916,20 +921,24 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
                     # 添加HTML正文
                     msg.attach(MIMEText(html_content, 'html', 'utf-8'))
                     
-                    # 添加Excel附件
-                    part = MIMEBase('application', 'octet-stream')
-                    part.set_payload(file_content)
-                    
-                    encoders.encode_base64(part)
-                    part.add_header(
-                        'Content-Disposition',
-                        f'attachment; filename="{Header(state.table_filename, "utf-8").encode()}'
-                    )
-                    msg.attach(part)
+                    # 只有第一个收件人（index == 0）添加Excel附件
+                    if index == 0:
+                        part = MIMEBase('application', 'octet-stream')
+                        part.set_payload(file_content)
+                        
+                        encoders.encode_base64(part)
+                        part.add_header(
+                            'Content-Disposition',
+                            f'attachment; filename="{Header(state.table_filename, "utf-8").encode()}'
+                        )
+                        msg.attach(part)
+                        print(f"📎 为第一个收件人 {recipient_email} 添加附件")
+                    else:
+                        print(f"📧 收件人 {recipient_email} 不发送附件")
                 else:
                     # 没有新闻时，只发送HTML通知邮件
                     msg = MIMEText(html_content, 'html', 'utf-8')
-                    msg["From"] = formataddr(("新闻收集助手", email_config["account"]))
+                    msg["From"] = formataddr(("Huxg", email_config["account"]))
                     msg["To"] = recipient_email
                     msg["Subject"] = Header(f"新闻汇总 - {today}（无新新闻）", 'utf-8')
                     msg["Date"] = formatdate(localtime=True)
