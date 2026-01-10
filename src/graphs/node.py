@@ -190,59 +190,59 @@ def deduplicate_news_node(state: DeduplicateNewsInput, config: RunnableConfig, r
     integrations: 数据库
     """
     ctx = runtime.context
-    
+
     try:
         from storage.database.db import get_session
         from storage.database.news_history_manager import NewsHistoryManager
-        
+
         # 获取数据库会话
         db = get_session()
-        
+
         try:
             # 创建管理器
             mgr = NewsHistoryManager()
-            
+
             # 获取所有历史新闻的URL和标题
             history_urls = mgr.get_all_urls(db)
             history_titles = mgr.get_all_titles(db)
-            
+
             print(f"历史记录中共有 {len(history_urls)} 个URL，{len(history_titles)} 个标题")
-            
+
             # 去重逻辑
             deduplicated_news = []
             duplicate_count = 0
-            
-            for news in state.news_list:
+
+            for news in state.filtered_news_list:
                 # 1. 检查URL是否已存在
                 if news.url in history_urls:
                     duplicate_count += 1
                     print(f"URL重复，跳过: {news.title}")
                     continue
-                
+
                 # 2. 检查标题是否已存在
                 if news.title in history_titles:
                     duplicate_count += 1
                     print(f"标题重复，跳过: {news.title}")
                     continue
-                
+
                 # 通过去重检查
                 deduplicated_news.append(news)
-            
-            print(f"去重完成: 原始 {len(state.news_list)} 条，去重 {duplicate_count} 条，剩余 {len(deduplicated_news)} 条")
-            
+
+            print(f"去重完成: 原始 {len(state.filtered_news_list)} 条，去重 {duplicate_count} 条，剩余 {len(deduplicated_news)} 条")
+
             # 如果去重后没有新闻，打印警告
             if not deduplicated_news:
                 print("警告: 去重后没有剩余的新闻！")
-            
-            return DeduplicateNewsOutput(deduplicated_news_list=deduplicated_news)
-            
+
+            return DeduplicateNewsOutput(filtered_news_list=deduplicated_news)
+
         finally:
             db.close()
-            
+
     except Exception as e:
         print(f"去重失败: {str(e)}，使用原始新闻列表")
         # 如果去重失败，返回原始新闻列表（保守处理）
-        return DeduplicateNewsOutput(deduplicated_news_list=state.news_list)
+        return DeduplicateNewsOutput(filtered_news_list=state.filtered_news_list)
 
 
 def extract_date_node(state: ExtractDateInput, config: RunnableConfig, runtime: Runtime[Context]) -> ExtractDateOutput:

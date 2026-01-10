@@ -19,21 +19,20 @@ class GlobalState(BaseModel):
     # 邮件信息（输入为字符串，处理为列表）
     emails: str = Field(default="", description="接收邮件的邮箱地址，多个邮箱用逗号分隔")
     emails_list: List[str] = Field(default=[], description="分割后的邮箱地址列表")
-    
+
     # 表格文件信息
     table_filepath: str = Field(default="", description="Excel表格文件路径")
     table_filename: str = Field(default="", description="Excel表格文件名")
-    
+
     # 新闻数据流
     raw_news_list: List[NewsItem] = Field(default=[], description="从今日头条获取的原始新闻列表")
-    deduplicated_news_list: List[NewsItem] = Field(default=[], description="去重后的新闻列表（去除历史重复）")
-    filtered_news_list: List[NewsItem] = Field(default=[], description="过滤后的新闻列表（近3个月内）")
+    filtered_news_list: List[NewsItem] = Field(default=[], description="过滤后的新闻列表（近3个月内且去重）")
     enriched_news_list: List[NewsItem] = Field(default=[], description="提取新闻信息后的新闻列表（含摘要、关键词、来源、地区）")
-    
+
     # 历史新闻去重用（注意：在节点中直接使用set类型，不在State中定义）
     # history_urls: set = Field(default=set(), description="历史新闻URL集合")
     # history_titles: set = Field(default=set(), description="历史新闻标题集合")
-    
+
     # 结果
     synced_count: int = Field(default=0, description="创建的新闻记录数")
     email_sent: bool = Field(default=False, description="邮件是否发送成功")
@@ -74,12 +73,12 @@ class FetchNewsOutput(BaseModel):
 
 class DeduplicateNewsInput(BaseModel):
     """新闻去重节点的输入"""
-    news_list: List[NewsItem] = Field(..., description="需要去重的新闻列表")
+    filtered_news_list: List[NewsItem] = Field(..., description="需要去重的新闻列表（已按日期过滤）")
 
 
 class DeduplicateNewsOutput(BaseModel):
     """新闻去重节点的输出"""
-    deduplicated_news_list: List[NewsItem] = Field(..., description="去重后的新闻列表（去除历史重复）")
+    filtered_news_list: List[NewsItem] = Field(..., description="去重后的新闻列表（去除历史重复）")
 
 
 class ExtractDateInput(BaseModel):
