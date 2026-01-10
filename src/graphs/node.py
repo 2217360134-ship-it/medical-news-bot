@@ -655,7 +655,7 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
             </body>
             </html>
             """
-            
+
             # 读取Excel文件内容
             with open(state.table_filepath, 'rb') as f:
                 file_content = f.read()
@@ -678,7 +678,7 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
                         <h2>医疗器械医美新闻汇总</h2>
                         <p>日期: {today}</p>
                     </div>
-                    
+
                     <div class="notice">
                         <h3>⚠️ 今日未收集到新新闻</h3>
                         <p>可能的原因：</p>
@@ -690,7 +690,7 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
                         <p><strong>工作流已正常运行，请勿担心。</strong></p>
                         <p>建议：明天再检查一次，或联系管理员。</p>
                     </div>
-                    
+
                     <div class="footer">
                         <p>此邮件由新闻收集助手自动发送</p>
                         <p>如有问题，请联系管理员</p>
@@ -699,83 +699,7 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
             </body>
             </html>
             """
-        
-        # 构建邮件内容（HTML格式）
-        from datetime import datetime
-        today = datetime.now().strftime("%Y-%m-%d")
-        
-        html_content = f"""
-        <html>
-        <head>
-            <style>
-                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-                .container {{ max-width: 800px; margin: 0 auto; padding: 20px; }}
-                .header {{ background-color: #4CAF50; color: white; padding: 20px; text-align: center; }}
-                .summary {{ background-color: #f8f8f8; padding: 15px; border-radius: 5px; margin: 20px 0; }}
-                .attachment-note {{ background-color: #fff3cd; border: 1px solid #ffeeba; padding: 15px; border-radius: 5px; margin: 20px 0; text-align: center; }}
-                .news-item {{ border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 5px; }}
-                .news-item:hover {{ box-shadow: 0 2px 5px rgba(0,0,0,0.1); }}
-                .news-title {{ font-size: 18px; font-weight: bold; margin-bottom: 10px; color: #2c3e50; }}
-                .news-meta {{ color: #666; font-size: 14px; margin-bottom: 10px; }}
-                .news-summary {{ margin-bottom: 10px; }}
-                .news-keywords {{ color: #e74c3c; font-size: 14px; }}
-                .news-link {{ color: #3498db; text-decoration: none; }}
-                .news-link:hover {{ text-decoration: underline; }}
-                .footer {{ text-align: center; margin-top: 30px; color: #999; font-size: 12px; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h2>医疗器械医美新闻汇总</h2>
-                    <p>日期: {today}</p>
-                </div>
-                
-                <div class="attachment-note">
-                    <p><strong>📎 详细数据已作为附件发送</strong></p>
-                    <p>附件文件: {state.table_filename}</p>
-                    <p>包含 {len(state.enriched_news_list)} 条新闻记录</p>
-                </div>
-                
-                <div class="summary">
-                    <p><strong>共收集到 {len(state.enriched_news_list)} 条相关新闻</strong></p>
-                    <p>来源: 今日头条、搜狐、人民网、新华网、央视网</p>
-                </div>
-        """
-        
-        # 添加每条新闻
-        for idx, news in enumerate(state.enriched_news_list, 1):
-            keywords_str = ", ".join(news.keywords) if news.keywords else "无"
-            source_str = news.source if news.source else "未知"
-            region_str = news.region if news.region else "-"
-            html_content += f"""
-                <div class="news-item">
-                    <div class="news-title">{idx}. {news.title}</div>
-                    <div class="news-meta">
-                        <strong>日期:</strong> {news.date} |
-                        <strong>来源:</strong> {source_str} |
-                        <strong>地区:</strong> {region_str} |
-                        <strong>关键词:</strong> <span class="news-keywords">{keywords_str}</span>
-                    </div>
-                    <div class="news-summary">
-                        <strong>摘要:</strong> {news.summary}
-                    </div>
-                    <div>
-                        <a href="{news.url}" class="news-link">查看原文 &rarr;</a>
-                    </div>
-                </div>
-            """
-        
-        html_content += f"""
-                <div class="footer">
-                    <p>此邮件由新闻收集助手自动发送</p>
-                    <p>如有问题，请联系管理员</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
-        
+
         # 分别发送给每个收件人
         success_count = 0
         failed_emails = []
