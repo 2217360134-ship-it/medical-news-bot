@@ -28,8 +28,7 @@ class GlobalState(BaseModel):
     raw_news_list: List[NewsItem] = Field(default=[], description="从今日头条获取的原始新闻列表")
     deduplicated_news_list: List[NewsItem] = Field(default=[], description="去重后的新闻列表（去除历史重复）")
     filtered_news_list: List[NewsItem] = Field(default=[], description="过滤后的新闻列表（近3个月内）")
-    summarized_news_list: List[NewsItem] = Field(default=[], description="生成摘要后的新闻列表")
-    enriched_news_list: List[NewsItem] = Field(default=[], description="提取关键词后的新闻列表")
+    enriched_news_list: List[NewsItem] = Field(default=[], description="提取新闻信息后的新闻列表（含摘要、关键词、来源、地区）")
     
     # 历史新闻去重用（注意：在节点中直接使用set类型，不在State中定义）
     # history_urls: set = Field(default=set(), description="历史新闻URL集合")
@@ -83,16 +82,6 @@ class DeduplicateNewsOutput(BaseModel):
     deduplicated_news_list: List[NewsItem] = Field(..., description="去重后的新闻列表（去除历史重复）")
 
 
-class GenerateSummaryInput(BaseModel):
-    """生成摘要节点的输入"""
-    filtered_news_list: List[NewsItem] = Field(..., description="需要生成摘要的新闻列表")
-
-
-class GenerateSummaryOutput(BaseModel):
-    """生成摘要节点的输出"""
-    summarized_news_list: List[NewsItem] = Field(..., description="生成摘要后的新闻列表")
-
-
 class ExtractDateInput(BaseModel):
     """日期提取节点的输入"""
     news_list: List[NewsItem] = Field(..., description="需要提取日期的新闻列表")
@@ -103,14 +92,14 @@ class ExtractDateOutput(BaseModel):
     filtered_news_list: List[NewsItem] = Field(..., description="过滤后的新闻列表（近3个月内）")
 
 
-class ExtractKeywordsInput(BaseModel):
-    """关键词提取节点的输入"""
-    filtered_news_list: List[NewsItem] = Field(..., description="需要提取关键词的新闻列表")
+class ExtractNewsInfoInput(BaseModel):
+    """新闻信息提取节点的输入"""
+    filtered_news_list: List[NewsItem] = Field(..., description="需要提取信息的新闻列表")
 
 
-class ExtractKeywordsOutput(BaseModel):
-    """关键词提取节点的输出"""
-    enriched_news_list: List[NewsItem] = Field(..., description="提取关键词后的新闻列表")
+class ExtractNewsInfoOutput(BaseModel):
+    """新闻信息提取节点的输出"""
+    enriched_news_list: List[NewsItem] = Field(..., description="提取新闻信息后的新闻列表（含摘要、关键词、来源、地区）")
 
 
 class CreateTableInput(BaseModel):
@@ -138,17 +127,6 @@ class SendEmailOutput(BaseModel):
     """发送邮件节点的输出"""
     email_sent: bool = Field(..., description="邮件是否发送成功")
     email_message: str = Field(..., description="邮件发送结果消息")
-
-
-class MergeNewsInfoInput(BaseModel):
-    """合并新闻信息节点的输入"""
-    summarized_news_list: List[NewsItem] = Field(..., description="生成摘要后的新闻列表（含source和region）")
-    enriched_news_list: List[NewsItem] = Field(..., description="提取关键词后的新闻列表")
-
-
-class MergeNewsInfoOutput(BaseModel):
-    """合并新闻信息节点的输出"""
-    enriched_news_list: List[NewsItem] = Field(..., description="合并后的完整新闻列表（包含摘要、关键词、source、region）")
 
 
 class SaveNewsHistoryInput(BaseModel):
