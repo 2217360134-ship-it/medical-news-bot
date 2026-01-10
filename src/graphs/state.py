@@ -72,16 +72,6 @@ class FetchNewsOutput(BaseModel):
     news_list: List[NewsItem] = Field(..., description="获取到的新闻列表")
 
 
-class DeduplicateNewsInput(BaseModel):
-    """新闻去重节点的输入"""
-    news_list: List[NewsItem] = Field(..., description="需要去重的新闻列表")
-
-
-class DeduplicateNewsOutput(BaseModel):
-    """新闻去重节点的输出"""
-    deduplicated_news_list: List[NewsItem] = Field(..., description="去重后的新闻列表（去除历史重复）")
-
-
 class ExtractDateInput(BaseModel):
     """日期提取节点的输入"""
     news_list: List[NewsItem] = Field(..., description="需要提取日期的新闻列表")
@@ -92,9 +82,19 @@ class ExtractDateOutput(BaseModel):
     filtered_news_list: List[NewsItem] = Field(..., description="过滤后的新闻列表（近3个月内）")
 
 
+class DeduplicateNewsInput(BaseModel):
+    """新闻去重节点的输入"""
+    filtered_news_list: List[NewsItem] = Field(..., description="需要去重的新闻列表（已过滤近3个月）")
+
+
+class DeduplicateNewsOutput(BaseModel):
+    """新闻去重节点的输出"""
+    deduplicated_news_list: List[NewsItem] = Field(..., description="去重后的新闻列表（去除历史重复）")
+
+
 class EnrichNewsInput(BaseModel):
     """新闻丰富节点的输入（合并摘要生成和关键词提取）"""
-    filtered_news_list: List[NewsItem] = Field(..., description="需要丰富的新闻列表")
+    deduplicated_news_list: List[NewsItem] = Field(..., description="需要丰富的新闻列表（已去重）")
 
 
 class EnrichNewsOutput(BaseModel):

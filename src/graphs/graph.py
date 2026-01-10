@@ -35,14 +35,14 @@ builder.set_entry_point("split_emails")
 # split_emails -> fetch_news
 builder.add_edge("split_emails", "fetch_news")
 
-# fetch_news -> deduplicate_news（去重历史新闻）
-builder.add_edge("fetch_news", "deduplicate_news")
+# fetch_news -> extract_date（提取日期并过滤）
+builder.add_edge("fetch_news", "extract_date")
 
-# deduplicate_news -> extract_date（提取日期）
-builder.add_edge("deduplicate_news", "extract_date")
+# extract_date -> deduplicate_news（去重历史新闻）
+builder.add_edge("extract_date", "deduplicate_news")
 
-# extract_date -> enrich_news（丰富新闻信息：摘要、关键词、来源、地区）
-builder.add_edge("extract_date", "enrich_news")
+# deduplicate_news -> enrich_news（丰富新闻信息：摘要、关键词、来源、地区）
+builder.add_edge("deduplicate_news", "enrich_news")
 
 # enrich_news -> create_table
 builder.add_edge("enrich_news", "create_table")

@@ -247,7 +247,7 @@ def deduplicate_news_node(state: DeduplicateNewsInput, config: RunnableConfig, r
             deduplicated_news = []
             duplicate_count = 0
             
-            for news in state.news_list:
+            for news in state.filtered_news_list:
                 # 1. 检查URL是否已存在
                 if news.url in history_urls:
                     duplicate_count += 1
@@ -263,7 +263,7 @@ def deduplicate_news_node(state: DeduplicateNewsInput, config: RunnableConfig, r
                 # 通过去重检查
                 deduplicated_news.append(news)
             
-            print(f"去重完成: 原始 {len(state.news_list)} 条，去重 {duplicate_count} 条，剩余 {len(deduplicated_news)} 条")
+            print(f"去重完成: 原始 {len(state.filtered_news_list)} 条，去重 {duplicate_count} 条，剩余 {len(deduplicated_news)} 条")
             
             # 如果去重后没有新闻，打印警告
             if not deduplicated_news:
@@ -277,7 +277,7 @@ def deduplicate_news_node(state: DeduplicateNewsInput, config: RunnableConfig, r
     except Exception as e:
         print(f"去重失败: {str(e)}，使用原始新闻列表")
         # 如果去重失败，返回原始新闻列表（保守处理）
-        return DeduplicateNewsOutput(deduplicated_news_list=state.news_list)
+        return DeduplicateNewsOutput(deduplicated_news_list=state.filtered_news_list)
 
 
 def enrich_news_node(state: EnrichNewsInput, config: RunnableConfig, runtime: Runtime[Context]) -> EnrichNewsOutput:
@@ -289,7 +289,7 @@ def enrich_news_node(state: EnrichNewsInput, config: RunnableConfig, runtime: Ru
     ctx = runtime.context
     
     # 检查是否为空列表
-    if not state.filtered_news_list:
+    if not state.deduplicated_news_list:
         print("新闻列表为空，跳过新闻丰富")
         return EnrichNewsOutput(enriched_news_list=[])
     
@@ -312,7 +312,7 @@ def enrich_news_node(state: EnrichNewsInput, config: RunnableConfig, runtime: Ru
     
     enriched_news = []
     
-    for news in state.filtered_news_list:
+    for news in state.deduplicated_news_list:
         try:
             # 渲染用户提示词
             up_tpl = Template(user_prompt_template)
