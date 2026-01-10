@@ -661,6 +661,8 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
                 file_content = f.read()
         else:
             # 没有新闻时，构建通知邮件
+            print("🔨 开始构建无新闻通知邮件的HTML内容...")
+
             html_content = f"""
             <html>
             <head>
@@ -700,35 +702,78 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
             </html>
             """
 
+            print(f"✅ HTML内容构建完成，长度: {len(html_content)}")
+            print(f"HTML内容前100字符: {html_content[:100]}")
+
         # 分别发送给每个收件人
         success_count = 0
         failed_emails = []
-        
+
+        # 调试：检查html_content是否正确构建
+        print(f"邮件HTML内容长度: {len(html_content)}")
+        print(f"HTML内容前200字符: {html_content[:200]}")
+
         # 为每个收件人单独发送邮件
         for idx, recipient_email in enumerate(state.emails_list):
             try:
                 # 判断是否为第一个收件人（只有第一个收件人才发送附件）
                 is_first_recipient = (idx == 0)
-                
+
                 # 创建邮件
                 if has_news:
-                    # 有新闻时，创建多部分邮件（HTML + 附件）
-                    msg = MIMEMultipart()
+                    # 有新闻时，创建多部分邮件（HTML + 附件 + 纯文本）
+                    msg = MIMEMultipart('mixed')
                     msg["From"] = formataddr(("Huxg", email_config["account"]))
                     msg["To"] = recipient_email  # 只显示一个收件地址
                     msg["Subject"] = Header(f"医疗器械医美新闻汇总 - {today}", 'utf-8')
                     msg["Date"] = formatdate(localtime=True)
                     msg["Message-ID"] = make_msgid()
-                    
-                    # 添加HTML正文
-                    msg.attach(MIMEText(html_content, 'html', 'utf-8'))
-                    
+
+                    # 创建多部分alternative（HTML + 纯文本）
+                    alternative_part = MIMEMultipart('alternative')
+
+                    # 构建纯文本版本
+                    text_content = f"""医疗器械医美新闻汇总
+日期: {today}
+
+📎 详细数据已作为附件发送
+附件文件: {state.table_filename}
+包含 {len(state.enriched_news_list)} 条新闻记录
+
+共收集到 {len(state.enriched_news_list)} 条相关新闻
+来源: 网络搜集
+
+"""
+                    # 添加每条新闻到纯文本版本
+                    for idx, news in enumerate(state.enriched_news_list, 1):
+                        keywords_str = ", ".join(news.keywords) if news.keywords else "无"
+                        source_str = news.source if news.source else "未知"
+                        region_str = news.region if news.region else "-"
+                        text_content += f"""
+{idx}. {news.title}
+日期: {news.date} | 来源: {source_str} | 地区: {region_str}
+关键词: {keywords_str}
+摘要: {news.summary}
+链接: {news.url}
+
+"""
+
+                    text_content += """
+此邮件由新闻收集助手自动发送
+如有问题，请联系管理员
+"""
+
+                    alternative_part.attach(MIMEText(text_content, 'plain', 'utf-8'))
+                    alternative_part.attach(MIMEText(html_content, 'html', 'utf-8'))
+
+                    msg.attach(alternative_part)
+
                     # 只有第一个收件人才添加Excel附件
                     if is_first_recipient:
                         # 添加Excel附件
                         part = MIMEBase('application', 'octet-stream')
                         part.set_payload(file_content)
-                        
+
                         encoders.encode_base64(part)
                         part.add_header(
                             'Content-Disposition',
@@ -737,12 +782,41 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
                         msg.attach(part)
                 else:
                     # 没有新闻时，只发送HTML通知邮件
-                    msg = MIMEText(html_content, 'html', 'utf-8')
+                    # 构建纯文本内容作为备用
+                    text_content = f"""医疗器械医美新闻汇总
+日期: {today}
+
+⚠️ 今日未收集到新新闻
+
+可能的原因：
+- 今日无医疗器械或医美相关新闻
+- 所有新闻已在之前发送过（已去重）
+- 网络搜索服务暂时不可用
+
+工作流已正常运行，请勿担心。
+建议：明天再检查一次，或联系管理员。
+
+此邮件由新闻收集助手自动发送
+如有问题，请联系管理员
+"""
+
+                    # 创建多部分邮件（HTML + 纯文本）
+                    msg = MIMEMultipart('alternative')
                     msg["From"] = formataddr(("Huxg", email_config["account"]))
                     msg["To"] = recipient_email
                     msg["Subject"] = Header(f"新闻汇总 - {today}（无新新闻）", 'utf-8')
                     msg["Date"] = formatdate(localtime=True)
                     msg["Message-ID"] = make_msgid()
+
+                    # 添加纯文本版本
+                    part_text = MIMEText(text_content, 'plain', 'utf-8')
+                    msg.attach(part_text)
+
+                    # 添加HTML版本
+                    part_html = MIMEText(html_content, 'html', 'utf-8')
+                    msg.attach(part_html)
+
+                    print(f"✅ 邮件对象创建成功，包含HTML和纯文本两个版本")
                 
                 # 发送邮件
                 ctx_ssl = ssl.create_default_context()
