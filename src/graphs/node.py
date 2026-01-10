@@ -41,8 +41,27 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
     """
     ctx = runtime.context
     
+    print("=" * 60)
+    print("开始执行 fetch_news_node - 获取新闻")
+    print("=" * 60)
+    
     # 导入网络搜索函数
     from tools.web_search_tool import web_search
+    
+    # 检查环境变量
+    api_key = os.getenv("COZE_WORKLOAD_IDENTITY_API_KEY")
+    base_url = os.getenv("COZE_INTEGRATION_BASE_URL")
+    
+    print(f"环境变量检查:")
+    print(f"  API Key: {'✅ 已配置' if api_key else '❌ 未配置'}")
+    print(f"  Base URL: {'✅ 已配置' if base_url else '❌ 未配置'}")
+    if base_url:
+        print(f"  Base URL 值: {base_url}")
+    
+    if not api_key or not base_url:
+        error_msg = "缺少必要的环境变量：COZE_WORKLOAD_IDENTITY_API_KEY 或 COZE_INTEGRATION_BASE_URL"
+        print(f"❌ 错误: {error_msg}")
+        raise Exception(error_msg)
     
     news_list = []
     
@@ -90,8 +109,11 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
         print(f"开始搜索新闻，第一批次网站: {target_sites_batch1}")
         
         # 第一批次：原有5个网站
-        for query in batch1_queries:
+        for idx, query in enumerate(batch1_queries, 1):
             try:
+                print(f"\n[批次1-{idx}/{len(batch1_queries)}] 开始搜索: '{query}'")
+                print(f"  目标网站: {target_sites_batch1}")
+                
                 web_items, _, _, _ = web_search(
                     ctx=ctx,
                     query=query,
@@ -101,19 +123,32 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
                     need_content=True,
                     sites=target_sites_batch1
                 )
+                
+                print(f"  ✅ 成功获取到 {len(web_items)} 条新闻")
+                for item in web_items[:3]:  # 只打印前3条，避免日志过长
+                    print(f"     - {item.Title[:50]}...")
+                if len(web_items) > 3:
+                    print(f"     ... 还有 {len(web_items)-3} 条")
+                
                 all_web_items.extend(web_items)
                 search_success_count += 1
-                print(f"[成功] 搜索 '{query}' 获取到 {len(web_items)} 条新闻")
+                
             except Exception as e:
                 search_fail_count += 1
-                print(f"[失败] 搜索 '{query}' 失败: {str(e)}")
+                print(f"  ❌ 搜索失败: {str(e)}")
+                print(f"     错误类型: {type(e).__name__}")
+                import traceback
+                print(f"     详细错误:\n{traceback.format_exc()}")
                 continue
         
         print(f"开始搜索新闻，第二批次网站: {target_sites_batch2}")
         
         # 第二批次：新增网站（新浪、澎湃网、36氪）
-        for query in batch2_queries:
+        for idx, query in enumerate(batch2_queries, 1):
             try:
+                print(f"\n[批次2-{idx}/{len(batch2_queries)}] 开始搜索: '{query}'")
+                print(f"  目标网站: {target_sites_batch2}")
+                
                 web_items, _, _, _ = web_search(
                     ctx=ctx,
                     query=query,
@@ -123,19 +158,27 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
                     need_content=True,
                     sites=target_sites_batch2
                 )
+                
+                print(f"  ✅ 成功获取到 {len(web_items)} 条新闻")
+                if len(web_items) > 0:
+                    print(f"     - {web_items[0].Title[:50]}...")
+                
                 all_web_items.extend(web_items)
                 search_success_count += 1
-                print(f"[成功] 搜索 '{query}' 获取到 {len(web_items)} 条新闻")
+                
             except Exception as e:
                 search_fail_count += 1
-                print(f"[失败] 搜索 '{query}' 失败: {str(e)}")
+                print(f"  ❌ 搜索失败: {str(e)}")
                 continue
         
         print(f"开始搜索新闻，第三批次网站: {target_sites_batch3}")
         
         # 第三批次：新增网站（环球医疗器械网、新浪财经）
-        for query in batch3_queries:
+        for idx, query in enumerate(batch3_queries, 1):
             try:
+                print(f"\n[批次3-{idx}/{len(batch3_queries)}] 开始搜索: '{query}'")
+                print(f"  目标网站: {target_sites_batch3}")
+                
                 web_items, _, _, _ = web_search(
                     ctx=ctx,
                     query=query,
@@ -145,24 +188,34 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
                     need_content=True,
                     sites=target_sites_batch3
                 )
+                
+                print(f"  ✅ 成功获取到 {len(web_items)} 条新闻")
+                if len(web_items) > 0:
+                    print(f"     - {web_items[0].Title[:50]}...")
+                
                 all_web_items.extend(web_items)
                 search_success_count += 1
-                print(f"[成功] 搜索 '{query}' 获取到 {len(web_items)} 条新闻")
+                
             except Exception as e:
                 search_fail_count += 1
-                print(f"[失败] 搜索 '{query}' 失败: {str(e)}")
+                print(f"  ❌ 搜索失败: {str(e)}")
                 continue
         
-        print(f"搜索完成: 成功 {search_success_count} 个查询，失败 {search_fail_count} 个查询")
-        print(f"总共获取到 {len(all_web_items)} 条原始新闻")
+        print(f"\n{'='*60}")
+        print(f"搜索完成统计:")
+        print(f"  成功: {search_success_count} 个查询")
+        print(f"  失败: {search_fail_count} 个查询")
+        print(f"  原始新闻总数: {len(all_web_items)} 条")
+        print(f"{'='*60}")
         
         # 如果没有获取到任何新闻，打印警告
         if not all_web_items:
-            print("⚠️ 警告: 所有搜索查询都没有获取到新闻！")
+            print("\n⚠️ 警告: 所有搜索查询都没有获取到新闻！")
             print("可能的原因:")
             print("  1. 网络搜索服务暂时不可用")
             print("  2. 目标网站没有相关新闻")
             print("  3. 搜索词需要调整")
+            print("  4. API Key 或 Base URL 配置错误")
         
         # 转换为NewsItem格式
         for item in all_web_items:
@@ -211,6 +264,26 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
             if normalized_title not in seen_titles:
                 seen_titles.add(normalized_title)
                 final_news.append(news)
+        
+        print(f"\n{'='*60}")
+        print(f"新闻去重后统计:")
+        print(f"  去重前: {len(news_list)} 条")
+        print(f"  URL去重后: {len(unique_by_url)} 条")
+        print(f"  标题去重后: {len(final_news)} 条")
+        print(f"{'='*60}")
+        
+        if final_news:
+            print(f"\n✅ 最终返回 {len(final_news)} 条新闻:")
+            for idx, news in enumerate(final_news[:5], 1):  # 只打印前5条
+                print(f"  {idx}. [{news.date}] {news.title[:60]}...")
+            if len(final_news) > 5:
+                print(f"  ... 还有 {len(final_news)-5} 条新闻")
+        else:
+            print(f"\n❌ 最终没有返回任何新闻")
+        
+        print(f"\n{'='*60}")
+        print("fetch_news_node 执行完成")
+        print(f"{'='*60}\n")
         
         return FetchNewsOutput(news_list=final_news)
         
