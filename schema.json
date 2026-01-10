@@ -12,9 +12,9 @@
     },
     {
       "name": "selected_sites",
-      "type": "multiselect",
+      "type": "checkboxes",
       "title": "选择新闻来源网站",
-      "description": "选择要从中收集新闻的网站（可多选）",
+      "description": "选择要从中收集新闻的网站（可多选，默认全选）",
       "required": false,
       "default": [
         "toutiao.com",
@@ -33,63 +33,51 @@
       "options": [
         {
           "value": "toutiao.com",
-          "label": "今日头条",
-          "description": "https://www.toutiao.com"
+          "label": "今日头条"
         },
         {
           "value": "sohu.com",
-          "label": "搜狐",
-          "description": "https://www.sohu.com"
+          "label": "搜狐"
         },
         {
           "value": "qq.com",
-          "label": "腾讯网",
-          "description": "https://www.qq.com"
+          "label": "腾讯网"
         },
         {
           "value": "163.com",
-          "label": "网易新闻",
-          "description": "https://www.163.com"
+          "label": "网易新闻"
         },
         {
           "value": "ifeng.com",
-          "label": "凤凰网",
-          "description": "https://www.ifeng.com"
+          "label": "凤凰网"
         },
         {
           "value": "thepaper.cn",
-          "label": "澎湃新闻网",
-          "description": "https://www.thepaper.cn"
+          "label": "澎湃新闻网"
         },
         {
           "value": "finance.sina.com.cn",
-          "label": "新浪财经",
-          "description": "https://finance.sina.com.cn"
+          "label": "新浪财经"
         },
         {
           "value": "sina.com.cn",
-          "label": "新浪网",
-          "description": "https://www.sina.com.cn"
+          "label": "新浪网"
         },
         {
           "value": "ylqx.qgyyzs.net",
-          "label": "环球网",
-          "description": "https://ylqx.qgyyzs.net"
+          "label": "环球网"
         },
         {
           "value": "camdi.cn",
-          "label": "医疗器械行业协会",
-          "description": "http://www.camdi.cn"
+          "label": "医疗器械行业协会"
         },
         {
           "value": "qxw18.com",
-          "label": "东方医疗器械网",
-          "description": "https://www.qxw18.com"
+          "label": "东方医疗器械网"
         },
         {
           "value": "cctv.com",
-          "label": "央视网",
-          "description": "https://www.cctv.com"
+          "label": "央视网"
         }
       ]
     }
