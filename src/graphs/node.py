@@ -36,7 +36,7 @@ def split_emails_node(state: SplitEmailsInput, config: RunnableConfig, runtime: 
 def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runtime[Context]) -> FetchNewsOutput:
     """
     title: 获取指定来源新闻
-    desc: 从今日头条、搜狐、腾讯网、网易新闻、凤凰网获取医疗器械和医美相关的新闻
+    desc: 从今日头条、搜狐、腾讯网、网易新闻、凤凰网、新浪、新浪财经、澎湃网、环球医疗器械网、36氪创投平台获取医疗器械和医美相关的新闻
     integrations: 联网搜索
     """
     ctx = runtime.context
@@ -46,41 +46,51 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
     
     news_list = []
     
-    # 定义目标新闻来源域名
-    target_sites = "toutiao.com|sohu.com|qq.com|163.com|ifeng.com"
+    # 定义目标新闻来源域名（原有 + 新增）
+    # 注意：搜索API限制最多5个域名，这里分批搜索
+    target_sites_batch1 = "toutiao.com|sohu.com|qq.com|163.com|ifeng.com"
+    target_sites_batch2 = "sina.com.cn|thepaper.cn|36kr.com"
+    target_sites_batch3 = "ylqx.qgyyzs.net|finance.sina.com.cn"
     
     # 构建核心搜索词列表（确保获取的新闻主体内容与医疗器械、医美相关）
-    medical_device_queries = [
+    # 第一批次查询（对应原有5个网站）
+    batch1_queries = [
         "医疗器械公司",
         "医疗器械产品",
         "医疗器械技术",
-        "医疗设备",
-        "诊断设备",
-        "IVD 体外诊断",
-        "医疗器械融资",
-        "医疗器械上市"
-    ]
-    
-    medical_beauty_queries = [
         "医美公司",
         "医美产品",
-        "医美技术",
+        "医美技术"
+    ]
+    
+    # 第二批次查询（对应新浪、澎湃网、36氪）
+    batch2_queries = [
+        "医疗设备",
+        "诊断设备",
         "激光美容",
         "整形美容",
-        "微整形",
+        "微整形"
+    ]
+    
+    # 第三批次查询（对应环球医疗器械网、新浪财经）
+    batch3_queries = [
+        "IVD 体外诊断",
+        "医疗器械融资",
+        "医疗器械上市",
         "医美融资",
         "医美上市"
     ]
     
     try:
-        # 并行搜索所有医疗器械相关查询
+        # 分批搜索，每批对应不同的网站
         all_web_items = []
         search_success_count = 0
         search_fail_count = 0
         
-        print(f"开始搜索新闻，目标网站: {target_sites}")
+        print(f"开始搜索新闻，第一批次网站: {target_sites_batch1}")
         
-        for query in medical_device_queries:
+        # 第一批次：原有5个网站
+        for query in batch1_queries:
             try:
                 web_items, _, _, _ = web_search(
                     ctx=ctx,
@@ -89,7 +99,7 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
                     count=10,
                     need_summary=True,
                     need_content=True,
-                    sites=target_sites
+                    sites=target_sites_batch1
                 )
                 all_web_items.extend(web_items)
                 search_success_count += 1
@@ -99,7 +109,10 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
                 print(f"[失败] 搜索 '{query}' 失败: {str(e)}")
                 continue
         
-        for query in medical_beauty_queries:
+        print(f"开始搜索新闻，第二批次网站: {target_sites_batch2}")
+        
+        # 第二批次：新增网站（新浪、澎湃网、36氪）
+        for query in batch2_queries:
             try:
                 web_items, _, _, _ = web_search(
                     ctx=ctx,
@@ -108,7 +121,29 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
                     count=10,
                     need_summary=True,
                     need_content=True,
-                    sites=target_sites
+                    sites=target_sites_batch2
+                )
+                all_web_items.extend(web_items)
+                search_success_count += 1
+                print(f"[成功] 搜索 '{query}' 获取到 {len(web_items)} 条新闻")
+            except Exception as e:
+                search_fail_count += 1
+                print(f"[失败] 搜索 '{query}' 失败: {str(e)}")
+                continue
+        
+        print(f"开始搜索新闻，第三批次网站: {target_sites_batch3}")
+        
+        # 第三批次：新增网站（环球医疗器械网、新浪财经）
+        for query in batch3_queries:
+            try:
+                web_items, _, _, _ = web_search(
+                    ctx=ctx,
+                    query=query,
+                    search_type="web",
+                    count=10,
+                    need_summary=True,
+                    need_content=True,
+                    sites=target_sites_batch3
                 )
                 all_web_items.extend(web_items)
                 search_success_count += 1
