@@ -36,19 +36,28 @@ def split_emails_node(state: SplitEmailsInput, config: RunnableConfig, runtime: 
 def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runtime[Context]) -> FetchNewsOutput:
     """
     title: 获取指定来源新闻
-    desc: 从今日头条、搜狐、腾讯网、网易新闻、凤凰网获取医疗器械和医美相关的新闻
+    desc: 从用户选择的新闻来源网站获取医疗器械和医美相关的新闻
     integrations: 联网搜索
     """
     ctx = runtime.context
-    
+
     # 导入网络搜索函数
     from tools.web_search_tool import web_search
-    
+
     news_list = []
-    
-    # 定义目标新闻来源域名
-    target_sites = "toutiao.com|sohu.com|qq.com|163.com|ifeng.com|thepaper.cn|finance.sina.com.cn|sina.com.cn|ylqx.qgyyzs.net|camdi.cn|qxw18.com|cctv.com"
-    
+
+    # 使用用户选择的网站列表
+    selected_sites_list = state.selected_sites
+    if not selected_sites_list:
+        print("❌ 错误: 没有选择任何新闻来源网站")
+        return FetchNewsOutput(news_list=[])
+
+    # 构建目标网站域名过滤字符串
+    target_sites = "|".join(selected_sites_list)
+
+    print(f"用户选择的新闻来源网站: {selected_sites_list}")
+    print(f"目标网站过滤: {target_sites}")
+
     # 构建核心搜索词列表（确保获取的新闻主体内容与医疗器械、医美相关）
     medical_device_queries = [
         "医疗器械公司",
@@ -60,7 +69,7 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
         "医疗器械融资",
         "医疗器械上市"
     ]
-    
+
     medical_beauty_queries = [
         "医美公司",
         "医美产品",
@@ -71,15 +80,15 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
         "医美融资",
         "医美上市"
     ]
-    
+
     try:
         # 并行搜索所有医疗器械相关查询
         all_web_items = []
         search_success_count = 0
         search_fail_count = 0
-        
+
         print(f"开始搜索新闻，目标网站: {target_sites}")
-        
+
         for query in medical_device_queries:
             try:
                 web_items, _, _, _ = web_search(
@@ -98,7 +107,7 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
                 search_fail_count += 1
                 print(f"[失败] 搜索 '{query}' 失败: {str(e)}")
                 continue
-        
+
         for query in medical_beauty_queries:
             try:
                 web_items, _, _, _ = web_search(
@@ -117,23 +126,24 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
                 search_fail_count += 1
                 print(f"[失败] 搜索 '{query}' 失败: {str(e)}")
                 continue
-        
+
         print(f"搜索完成: 成功 {search_success_count} 个查询，失败 {search_fail_count} 个查询")
         print(f"总共获取到 {len(all_web_items)} 条原始新闻")
-        
+
         # 如果没有获取到任何新闻，打印警告
         if not all_web_items:
             print("⚠️ 警告: 所有搜索查询都没有获取到新闻！")
             print("可能的原因:")
             print("  1. 网络搜索服务暂时不可用")
-            print("  2. 目标网站没有相关新闻")
+            print("  2. 选定的网站没有相关新闻")
             print("  3. 搜索词需要调整")
-        
+            print("  4. 建议尝试选择其他网站")
+
         # 转换为NewsItem格式
         for item in all_web_items:
             if not item.Url:
                 continue
-            
+
             # 解析日期，如果PublishTime为空则使用当前日期
             if item.PublishTime:
                 try:
@@ -143,7 +153,7 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
                     publish_date = datetime.now().strftime('%Y-%m-%d')
             else:
                 publish_date = datetime.now().strftime('%Y-%m-%d')
-            
+
             news_item = NewsItem(
                 title=item.Title or "",
                 date=publish_date,
@@ -153,7 +163,7 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
                 keywords=[]
             )
             news_list.append(news_item)
-        
+
         # 去重逻辑
         # 1. 根据URL去重
         seen_urls = set()
@@ -162,7 +172,7 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
             if news.url not in seen_urls:
                 seen_urls.add(news.url)
                 unique_by_url.append(news)
-        
+
         # 2. 根据标题相似度去重（避免不同网站的相同新闻）
         seen_titles = set()
         final_news = []
@@ -172,13 +182,13 @@ def fetch_news_node(state: FetchNewsInput, config: RunnableConfig, runtime: Runt
             # 移除一些常见的网站名称后缀
             for suffix in ['| toutiao', '- 今日头条', '_头条', '_新闻', '_资讯']:
                 normalized_title = normalized_title.replace(suffix.lower(), '')
-            
+
             if normalized_title not in seen_titles:
                 seen_titles.add(normalized_title)
                 final_news.append(news)
-        
+
         return FetchNewsOutput(news_list=final_news)
-        
+
     except Exception as e:
         raise Exception(f"获取新闻失败: {str(e)}")
 

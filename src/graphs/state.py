@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Literal
 from pydantic import BaseModel, Field
 
 
@@ -13,12 +13,31 @@ class NewsItem(BaseModel):
     region: str = Field(default="", description="地区")
     keywords: List[str] = Field(default=[], description="关键词列表")
 
+# 定义所有可用的新闻来源网站
+AVAILABLE_NEWS_SITES = [
+    {"id": "toutiao.com", "name": "今日头条", "url": "https://www.toutiao.com"},
+    {"id": "sohu.com", "name": "搜狐", "url": "https://www.sohu.com"},
+    {"id": "qq.com", "name": "腾讯网", "url": "https://www.qq.com"},
+    {"id": "163.com", "name": "网易新闻", "url": "https://www.163.com"},
+    {"id": "ifeng.com", "name": "凤凰网", "url": "https://www.ifeng.com"},
+    {"id": "thepaper.cn", "name": "澎湃新闻网", "url": "https://www.thepaper.cn"},
+    {"id": "finance.sina.com.cn", "name": "新浪财经", "url": "https://finance.sina.com.cn"},
+    {"id": "sina.com.cn", "name": "新浪网", "url": "https://www.sina.com.cn"},
+    {"id": "ylqx.qgyyzs.net", "name": "环球网", "url": "https://ylqx.qgyyzs.net"},
+    {"id": "camdi.cn", "name": "医疗器械行业协会", "url": "http://www.camdi.cn/news/list/50,63,0"},
+    {"id": "qxw18.com", "name": "东方医疗器械网", "url": "https://www.qxw18.com/info/list-catid-3181.html"},
+    {"id": "cctv.com", "name": "央视网", "url": "https://www.cctv.com"}
+]
+
 
 class GlobalState(BaseModel):
     """全局状态定义"""
     # 邮件信息（输入为字符串，处理为列表）
     emails: str = Field(default="", description="接收邮件的邮箱地址，多个邮箱用逗号分隔")
     emails_list: List[str] = Field(default=[], description="分割后的邮箱地址列表")
+
+    # 新闻来源网站选择
+    selected_sites: List[str] = Field(default=[], description="用户选择的新闻来源网站列表")
 
     # 表格文件信息
     table_filepath: str = Field(default="", description="Excel表格文件路径")
@@ -42,6 +61,10 @@ class GlobalState(BaseModel):
 class GraphInput(BaseModel):
     """工作流的输入"""
     emails: str = Field(..., description="接收邮件的邮箱地址，多个邮箱用逗号分隔，例如：user1@example.com,user2@example.com")
+    selected_sites: List[str] = Field(
+        default=["toutiao.com", "sohu.com", "qq.com", "163.com", "ifeng.com", "thepaper.cn", "finance.sina.com.cn", "sina.com.cn", "ylqx.qgyyzs.net", "camdi.cn", "qxw18.com", "cctv.com"],
+        description="选择新闻来源网站（多选）"
+    )
 
 
 class GraphOutput(BaseModel):
@@ -63,7 +86,7 @@ class SplitEmailsOutput(BaseModel):
 
 class FetchNewsInput(BaseModel):
     """新闻获取节点的输入"""
-    pass
+    selected_sites: List[str] = Field(..., description="用户选择的新闻来源网站列表")
 
 
 class FetchNewsOutput(BaseModel):
