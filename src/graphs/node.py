@@ -739,7 +739,7 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
                     
                     <div class="summary">
                         <p><strong>共收集到 {len(state.enriched_news_list)} 条相关新闻</strong></p>
-                        <p>来源: 今日头条、搜狐、人民网、新华网、央视网</p>
+                        <p>来源: 网络搜集</p>
                     </div>
             """
             
