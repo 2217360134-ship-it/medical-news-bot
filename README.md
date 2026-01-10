@@ -12,7 +12,50 @@ bash scripts/http_run.sh -m http -p 5000
 
 # GitHub 部署指南
 
-## 步骤 1: 创建 GitHub 仓库
+## 方式 1: 使用 API 部署（推荐）🚀
+
+### 快速开始
+
+1. **获取 Personal Access Token**
+   - 访问 https://github.com/settings/tokens
+   - 创建新 Token，勾选 `repo` 权限
+   - 详细步骤：[Token 获取指南](docs/GITHUB_TOKEN_GUIDE.md)
+
+2. **执行部署命令**
+
+   **Python 脚本（推荐）**：
+   ```bash
+   pip install requests cryptography  # 首次需要
+
+   python scripts/deploy_via_api.py \
+       --token ghp_xxxxxxxxxxxx \
+       --username your-username \
+       --repo news-bot
+   ```
+
+   **Bash 脚本**：
+   ```bash
+   bash scripts/deploy_via_api.sh ghp_xxxxxxxxxxxx your-username news-bot
+   ```
+
+   **创建私有仓库**：
+   ```bash
+   python scripts/deploy_via_api.py \
+       --token ghp_xxx \
+       --username your-username \
+       --repo news-bot \
+       --private
+   ```
+
+3. **配置 GitHub Secrets**（参考下方说明）
+
+更多 API 部署示例：[API 部署完整指南](docs/API_DEPLOYMENT.md)
+
+---
+
+## 方式 2: 传统方式部署
+
+### 步骤 1: 创建 GitHub 仓库
 
 1. 登录 [GitHub](https://github.com)
 2. 点击右上角 "+" 按钮，选择 "New repository"
