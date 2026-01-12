@@ -10,10 +10,11 @@ from graphs.state import (
     CreateTableInput, CreateTableOutput,
     SendEmailInput, SendEmailOutput,
     SaveNewsHistoryInput, SaveNewsHistoryOutput,
+    SearchUntil10Input, SearchUntil10Output,
     NewsItem
 )
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from cozeloop.decorator import observe
 import json
 from jinja2 import Template
@@ -982,9 +983,138 @@ def save_news_history_node(state: SaveNewsHistoryInput, config: RunnableConfig, 
                 saved_count=saved_count,
                 message=f"成功保存 {saved_count} 条新闻历史记录"
             )
-            
+
         finally:
             db.close()
-            
+
     except Exception as e:
         raise Exception(f"保存新闻历史记录失败: {str(e)}")
+
+
+def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runtime: Runtime[Context]) -> SearchUntil10Output:
+    """
+    title: 循环搜索直到达到10条新闻
+    desc: 调用子图循环搜索，直到新闻数量达到10条或达到最大搜索次数（3次）
+    """
+    ctx = runtime.context
+
+    print("=" * 80)
+    print("开始执行 search_until_10_node - 循环搜索新闻")
+    print("目标: 10条新闻，最大搜索次数: 3次")
+    print("=" * 80)
+
+    # 导入子图
+    from graphs.loop_graph import loop_graph
+
+    # 调用子图，循环搜索
+    loop_result = loop_graph.invoke({
+        "target_count": 10,
+        "max_searches": 3,
+        "search_count": 0,
+        "accumulated_news": []
+    })
+
+    accumulated_news = loop_result.get("accumulated_news", [])
+    search_count = loop_result.get("search_count", 0)
+
+    print("\n" + "=" * 80)
+    print("子图执行完成")
+    print(f"搜索次数: {search_count}")
+    print(f"累积新闻数量: {len(accumulated_news)}")
+    print("=" * 80)
+
+    # 日期过滤：近3个月
+    print("\n开始日期过滤（近3个月）...")
+    today = datetime.now()
+    three_months_ago = today - timedelta(days=90)
+    cutoff_date_str = three_months_ago.strftime('%Y-%m-%d')
+    print(f"截止日期: {cutoff_date_str}")
+
+    filtered_news = []
+    for news in accumulated_news:
+        try:
+            # 解析新闻日期
+            news_date = news.date if news.date else today.strftime('%Y-%m-%d')
+
+            # 检查日期格式
+            import re
+            if not re.match(r'^\d{4}-\d{2}-\d{2}$', news_date):
+                print(f"  日期格式无效，跳过: {news.title}")
+                continue
+
+            # 判断日期是否在近3个月内
+            if news_date >= cutoff_date_str:
+                filtered_news.append(news)
+            else:
+                print(f"  新闻已过滤（日期过早）: {news.title}, 日期: {news_date}")
+
+        except Exception as e:
+            print(f"  处理日期失败: {str(e)}, 跳过新闻: {news.title}")
+            continue
+
+    print(f"日期过滤完成: {len(accumulated_news)} -> {len(filtered_news)} 条")
+
+    # 历史记录去重
+    print("\n开始历史记录去重...")
+    try:
+        from storage.database.db import get_session
+        from storage.database.news_history_manager import NewsHistoryManager
+
+        db = get_session()
+        try:
+            mgr = NewsHistoryManager()
+
+            # 获取历史记录（近90天）
+            history_urls = mgr.get_all_urls(db)
+            history_titles = mgr.get_all_titles(db)
+
+            print(f"  历史记录: {len(history_urls)} 个URL, {len(history_titles)} 个标题")
+
+            # 去重
+            deduplicated_news = []
+            duplicate_count = 0
+
+            for news in filtered_news:
+                if news.url in history_urls:
+                    duplicate_count += 1
+                    continue
+
+                if news.title in history_titles:
+                    duplicate_count += 1
+                    continue
+
+                deduplicated_news.append(news)
+
+            print(f"  去重完成: 去重 {duplicate_count} 条，剩余 {len(deduplicated_news)} 条")
+
+        finally:
+            db.close()
+
+    except Exception as e:
+        print(f"  去重失败: {str(e)}，使用过滤后的新闻列表")
+        deduplicated_news = filtered_news
+
+    # 检查是否达到目标
+    print("\n" + "=" * 80)
+    print("最终结果:")
+    print(f"  新闻数量: {len(deduplicated_news)}")
+    print(f"  目标数量: 10")
+    print("=" * 80)
+
+    if len(deduplicated_news) >= 10:
+        print("✅ 已达到目标数量，继续发送邮件")
+        message = f"循环搜索完成，共 {search_count} 次搜索，获取 {len(deduplicated_news)} 条新闻"
+        return SearchUntil10Output(
+            filtered_news_list=filtered_news,
+            deduplicated_news_list=deduplicated_news,
+            message=message
+        )
+    else:
+        print("❌ 未达到目标数量，不发送邮件")
+        message = f"循环搜索完成，共 {search_count} 次搜索，仅获取 {len(deduplicated_news)} 条新闻（目标10条），不发送邮件"
+        return SearchUntil10Output(
+            filtered_news_list=[],  # 返回空列表
+            deduplicated_news_list=[],  # 返回空列表
+            message=message
+        )
+

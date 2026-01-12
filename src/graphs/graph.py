@@ -6,10 +6,8 @@ from graphs.state import (
 )
 from graphs.node import (
     split_emails_node,
-    fetch_news_node,
-    deduplicate_news_node,
+    search_until_10_node,
     enrich_news_node,
-    extract_date_node,
     create_table_node,
     send_email_node,
     save_news_history_node
@@ -20,29 +18,40 @@ builder = StateGraph(GlobalState, input_schema=GraphInput, output_schema=GraphOu
 
 # 添加节点（为所有节点添加metadata以便预览正确显示）
 builder.add_node("split_emails", split_emails_node, metadata={"type": "normal"})
-builder.add_node("fetch_news", fetch_news_node, metadata={"type": "normal"})
-builder.add_node("deduplicate_news", deduplicate_news_node, metadata={"type": "normal"})
-builder.add_node("extract_date", extract_date_node, metadata={"type": "normal"})
+builder.add_node("search_until_10", search_until_10_node, metadata={"type": "normal"})
 builder.add_node("enrich_news", enrich_news_node, metadata={"type": "agent", "llm_cfg": "config/enrich_news_llm_cfg.json"})
 builder.add_node("create_table", create_table_node, metadata={"type": "normal"})
 builder.add_node("send_email", send_email_node, metadata={"type": "normal"})
 builder.add_node("save_news_history", save_news_history_node, metadata={"type": "normal"})
 
+
+# 条件判断函数：检查是否有新闻
+def check_has_news(state: GlobalState) -> str:
+    """
+    检查 filtered_news_list 是否为空
+    """
+    if state.filtered_news_list and len(state.filtered_news_list) >= 10:
+        return "有新闻"
+    else:
+        return "无新闻"
+
+
 # 设置入口点
 builder.set_entry_point("split_emails")
 
 # 添加边 - 线性工作流架构
-# split_emails -> fetch_news
-builder.add_edge("split_emails", "fetch_news")
+# split_emails -> search_until_10（循环搜索直到达到10条）
+builder.add_edge("split_emails", "search_until_10")
 
-# fetch_news -> extract_date（提取日期并过滤）
-builder.add_edge("fetch_news", "extract_date")
-
-# extract_date -> deduplicate_news（去重历史新闻）
-builder.add_edge("extract_date", "deduplicate_news")
-
-# deduplicate_news -> enrich_news（丰富新闻信息：摘要、关键词、来源、地区）
-builder.add_edge("deduplicate_news", "enrich_news")
+# search_until_10 -> 条件判断
+builder.add_conditional_edges(
+    source="search_until_10",
+    path=check_has_news,
+    path_map={
+        "有新闻": "enrich_news",
+        "无新闻": END
+    }
+)
 
 # enrich_news -> create_table
 builder.add_edge("enrich_news", "create_table")

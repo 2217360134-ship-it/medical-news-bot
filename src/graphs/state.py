@@ -138,3 +138,69 @@ class SaveNewsHistoryOutput(BaseModel):
     """保存新闻历史记录节点的输出"""
     saved_count: int = Field(..., description="成功保存的新闻记录数")
     message: str = Field(..., description="保存结果消息")
+
+
+# ===== 循环搜索子图相关状态定义 =====
+
+class LoopGlobalState(BaseModel):
+    """循环搜索子图的全局状态"""
+    accumulated_news: List[NewsItem] = Field(default=[], description="累积的新闻列表")
+    search_count: int = Field(default=0, description="已搜索次数")
+    target_count: int = Field(default=10, description="目标新闻数量")
+    max_searches: int = Field(default=3, description="最大搜索次数")
+    current_batch_news: List[NewsItem] = Field(default=[], description="当前批次搜索到的新闻")
+    has_reached_target: bool = Field(default=False, description="是否已达到目标数量")
+
+
+class FetchBatchInput(BaseModel):
+    """批次搜索节点的输入"""
+    pass
+
+
+class FetchBatchOutput(BaseModel):
+    """批次搜索节点的输出"""
+    batch_news_list: List[NewsItem] = Field(..., description="当前批次搜索到的新闻列表")
+
+
+class DeduplicateBatchInput(BaseModel):
+    """批次去重节点的输入"""
+    batch_news_list: List[NewsItem] = Field(..., description="当前批次的新闻列表")
+    accumulated_news: List[NewsItem] = Field(default=[], description="累积的新闻列表")
+
+
+class DeduplicateBatchOutput(BaseModel):
+    """批次去重节点的输出"""
+    deduplicated_batch_news: List[NewsItem] = Field(..., description="去重后的当前批次新闻")
+
+
+class AccumulateInput(BaseModel):
+    """累积新闻节点的输入"""
+    deduplicated_batch_news: List[NewsItem] = Field(..., description="去重后的当前批次新闻")
+    accumulated_news: List[NewsItem] = Field(default=[], description="累积的新闻列表")
+    search_count: int = Field(..., description="当前搜索次数")
+
+
+class AccumulateOutput(BaseModel):
+    """累积新闻节点的输出"""
+    accumulated_news: List[NewsItem] = Field(..., description="更新后的累积新闻列表")
+    search_count: int = Field(..., description="更新后的搜索次数")
+
+
+class CheckThresholdInput(BaseModel):
+    """检查阈值节点的输入"""
+    accumulated_news: List[NewsItem] = Field(default=[], description="累积的新闻列表")
+    search_count: int = Field(..., description="当前搜索次数")
+    target_count: int = Field(..., description="目标新闻数量")
+    max_searches: int = Field(..., description="最大搜索次数")
+
+
+class SearchUntil10Input(BaseModel):
+    """循环搜索直到达到10条新闻节点的输入"""
+    pass
+
+
+class SearchUntil10Output(BaseModel):
+    """循环搜索直到达到10条新闻节点的输出"""
+    filtered_news_list: List[NewsItem] = Field(default=[], description="过滤后的新闻列表（近3个月内）")
+    deduplicated_news_list: List[NewsItem] = Field(default=[], description="去重后的新闻列表（去除历史重复）")
+    message: str = Field(..., description="执行结果消息")
