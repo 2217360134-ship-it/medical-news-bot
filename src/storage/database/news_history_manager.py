@@ -111,3 +111,12 @@ class NewsHistoryManager:
         获取历史新闻总数
         """
         return db.query(NewsHistory).count()
+
+    def clear_all(self, db: Session) -> int:
+        """
+        清空所有新闻历史记录
+        返回: 删除的记录数
+        """
+        deleted_count = db.query(NewsHistory).delete(synchronize_session=False)
+        db.commit()
+        return deleted_count

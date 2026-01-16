@@ -993,15 +993,15 @@ def save_news_history_node(state: SaveNewsHistoryInput, config: RunnableConfig, 
 
 def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runtime: Runtime[Context]) -> SearchUntil10Output:
     """
-    title: 循环搜索直到达到10条新闻
-    desc: 循环执行"搜索-日期过滤-历史去重-检查数量"流程，直到去重后数量达到10条或达到最大搜索次数（8次），每次间隔30秒
+    title: 循环搜索直到达到5条新闻
+    desc: 循环执行"搜索-日期过滤-历史去重-检查数量"流程，直到去重后数量达到5条或达到最大搜索次数（8次），每次间隔30秒
     """
     import time
     ctx = runtime.context
 
     print("=" * 80)
     print("开始执行 search_until_10_node - 循环搜索新闻")
-    print("目标: 10条新闻，最大搜索次数: 8次")
+    print("目标: 5条新闻，最大搜索次数: 8次")
     print("=" * 80)
 
     # 导入子图
@@ -1011,7 +1011,7 @@ def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runt
     all_accumulated_news = []  # 所有累积的新闻
     all_deduplicated_news = []  # 所有去重后的新闻（累积）
     search_count = 0  # 总搜索次数
-    target_count = 10  # 目标数量
+    target_count = 5  # 目标数量
     max_searches = 8  # 最大搜索次数
 
     # 获取历史记录（用于去重）
@@ -1047,7 +1047,7 @@ def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runt
 
         # 1. 调用子图搜索一批新闻（只搜索1次）
         loop_result = loop_graph.invoke({
-            "target_count": 10,  # 子图内部的目标
+            "target_count": 5,  # 子图内部的目标
             "max_searches": 1,   # 子图只搜索1次
             "search_count": 0,
             "accumulated_news": []
@@ -1149,7 +1149,7 @@ def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runt
         )
     else:
         print("❌ 未达到目标数量，不发送邮件")
-        message = f"循环搜索完成，共 {search_count} 次搜索，仅获取 {len(all_deduplicated_news)} 条新闻（目标10条），不发送邮件"
+        message = f"循环搜索完成，共 {search_count} 次搜索，仅获取 {len(all_deduplicated_news)} 条新闻（目标5条），不发送邮件"
         return SearchUntil10Output(
             filtered_news_list=[],  # 返回空列表
             deduplicated_news_list=[],  # 返回空列表

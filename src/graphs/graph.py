@@ -30,7 +30,7 @@ def check_has_news(state: GlobalState) -> str:
     """
     检查 filtered_news_list 是否为空
     """
-    if state.filtered_news_list and len(state.filtered_news_list) >= 10:
+    if state.filtered_news_list and len(state.filtered_news_list) >= 5:
         return "有新闻"
     else:
         return "无新闻"
