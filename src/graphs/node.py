@@ -755,7 +755,7 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
             
             html_content += f"""
                     <div class="footer">
-                        <p>此邮件由新闻收集助手自动发送</p>
+                        <p>此邮件由Huxg自动发送</p>
                         <p>如有问题，请联系管理员</p>
                     </div>
                 </div>
@@ -799,7 +799,7 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
                     </div>
                     
                     <div class="footer">
-                        <p>此邮件由新闻收集助手自动发送</p>
+                        <p>此邮件由Huxg自动发送</p>
                         <p>如有问题，请联系管理员</p>
                     </div>
                 </div>
@@ -824,7 +824,7 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
                         # 第一个收件人：发送带附件的邮件（HTML + 附件）
                         print(f"📎 发送带附件的邮件到第一个收件人: {recipient_email}")
                         msg = MIMEMultipart()
-                        msg["From"] = formataddr(("新闻收集助手", email_config["account"]))
+                        msg["From"] = formataddr(("Huxg", email_config["account"]))
                         msg["To"] = recipient_email  # 只显示一个收件地址
                         msg["Subject"] = Header(f"医疗器械医美新闻汇总 - {today}", 'utf-8')
                         msg["Date"] = formatdate(localtime=True)
@@ -847,7 +847,7 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
                         # 后续收件人：只发送HTML内容（不含附件）
                         print(f"📧 发送无附件的邮件到后续收件人: {recipient_email}")
                         msg = MIMEText(html_content, 'html', 'utf-8')
-                        msg["From"] = formataddr(("新闻收集助手", email_config["account"]))
+                        msg["From"] = formataddr(("Huxg", email_config["account"]))
                         msg["To"] = recipient_email
                         msg["Subject"] = Header(f"医疗器械医美新闻汇总 - {today}", 'utf-8')
                         msg["Date"] = formatdate(localtime=True)
@@ -855,7 +855,7 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
                 else:
                     # 没有新闻时，只发送HTML通知邮件
                     msg = MIMEText(html_content, 'html', 'utf-8')
-                    msg["From"] = formataddr(("新闻收集助手", email_config["account"]))
+                    msg["From"] = formataddr(("Huxg", email_config["account"]))
                     msg["To"] = recipient_email
                     msg["Subject"] = Header(f"新闻汇总 - {today}（无新新闻）", 'utf-8')
                     msg["Date"] = formatdate(localtime=True)
