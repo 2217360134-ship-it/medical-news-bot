@@ -994,8 +994,9 @@ def save_news_history_node(state: SaveNewsHistoryInput, config: RunnableConfig, 
 def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runtime: Runtime[Context]) -> SearchUntil10Output:
     """
     title: 循环搜索直到达到10条新闻
-    desc: 调用子图循环搜索，直到新闻数量达到10条或达到最大搜索次数（3次）
+    desc: 循环执行"搜索-日期过滤-历史去重-检查数量"流程，直到去重后数量达到10条或达到最大搜索次数（8次），每次间隔30秒
     """
+    import time
     ctx = runtime.context
 
     print("=" * 80)
@@ -1006,56 +1007,16 @@ def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runt
     # 导入子图
     from graphs.loop_graph import loop_graph
 
-    # 调用子图，循环搜索
-    loop_result = loop_graph.invoke({
-        "target_count": 10,
-        "max_searches": 8,
-        "search_count": 0,
-        "accumulated_news": []
-    })
+    # 初始化变量
+    all_accumulated_news = []  # 所有累积的新闻
+    all_deduplicated_news = []  # 所有去重后的新闻（累积）
+    search_count = 0  # 总搜索次数
+    target_count = 10  # 目标数量
+    max_searches = 8  # 最大搜索次数
 
-    accumulated_news = loop_result.get("accumulated_news", [])
-    search_count = loop_result.get("search_count", 0)
-
-    print("\n" + "=" * 80)
-    print("子图执行完成")
-    print(f"搜索次数: {search_count}")
-    print(f"累积新闻数量: {len(accumulated_news)}")
-    print("=" * 80)
-
-    # 日期过滤：近3个月
-    print("\n开始日期过滤（近3个月）...")
-    today = datetime.now()
-    three_months_ago = today - timedelta(days=90)
-    cutoff_date_str = three_months_ago.strftime('%Y-%m-%d')
-    print(f"截止日期: {cutoff_date_str}")
-
-    filtered_news = []
-    for news in accumulated_news:
-        try:
-            # 解析新闻日期
-            news_date = news.date if news.date else today.strftime('%Y-%m-%d')
-
-            # 检查日期格式
-            import re
-            if not re.match(r'^\d{4}-\d{2}-\d{2}$', news_date):
-                print(f"  日期格式无效，跳过: {news.title}")
-                continue
-
-            # 判断日期是否在近3个月内
-            if news_date >= cutoff_date_str:
-                filtered_news.append(news)
-            else:
-                print(f"  新闻已过滤（日期过早）: {news.title}, 日期: {news_date}")
-
-        except Exception as e:
-            print(f"  处理日期失败: {str(e)}, 跳过新闻: {news.title}")
-            continue
-
-    print(f"日期过滤完成: {len(accumulated_news)} -> {len(filtered_news)} 条")
-
-    # 历史记录去重
-    print("\n开始历史记录去重...")
+    # 获取历史记录（用于去重）
+    history_urls = set()
+    history_titles = set()
     try:
         from storage.database.db import get_session
         from storage.database.news_history_manager import NewsHistoryManager
@@ -1063,55 +1024,132 @@ def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runt
         db = get_session()
         try:
             mgr = NewsHistoryManager()
-
-            # 获取历史记录（近90天）
             history_urls = mgr.get_all_urls(db)
             history_titles = mgr.get_all_titles(db)
-
-            print(f"  历史记录: {len(history_urls)} 个URL, {len(history_titles)} 个标题")
-
-            # 去重
-            deduplicated_news = []
-            duplicate_count = 0
-
-            for news in filtered_news:
-                if news.url in history_urls:
-                    duplicate_count += 1
-                    continue
-
-                if news.title in history_titles:
-                    duplicate_count += 1
-                    continue
-
-                deduplicated_news.append(news)
-
-            print(f"  去重完成: 去重 {duplicate_count} 条，剩余 {len(deduplicated_news)} 条")
-
+            print(f"历史记录: {len(history_urls)} 个URL, {len(history_titles)} 个标题")
         finally:
             db.close()
-
     except Exception as e:
-        print(f"  去重失败: {str(e)}，使用过滤后的新闻列表")
-        deduplicated_news = filtered_news
+        print(f"获取历史记录失败: {str(e)}")
 
-    # 检查是否达到目标
+    # 计算日期过滤截止日期（近3个月）
+    today = datetime.now()
+    three_months_ago = today - timedelta(days=90)
+    cutoff_date_str = three_months_ago.strftime('%Y-%m-%d')
+    print(f"日期过滤截止日期: {cutoff_date_str}")
+
+    # 主循环：搜索 → 日期过滤 → 历史去重 → 累积 → 检查数量
+    while search_count < max_searches and len(all_deduplicated_news) < target_count:
+        search_count += 1
+        print("\n" + "=" * 80)
+        print(f"[主循环-{search_count}/{max_searches}] 开始搜索")
+        print("=" * 80)
+
+        # 1. 调用子图搜索一批新闻（只搜索1次）
+        loop_result = loop_graph.invoke({
+            "target_count": 10,  # 子图内部的目标
+            "max_searches": 1,   # 子图只搜索1次
+            "search_count": 0,
+            "accumulated_news": []
+        })
+
+        accumulated_news = loop_result.get("accumulated_news", [])
+        print(f"子图返回: {len(accumulated_news)} 条原始新闻")
+
+        # 2. 日期过滤（近3个月）
+        filtered_news = []
+        for news in accumulated_news:
+            try:
+                # 解析新闻日期
+                news_date = news.date if news.date else today.strftime('%Y-%m-%d')
+
+                # 检查日期格式
+                import re
+                if not re.match(r'^\d{4}-\d{2}-\d{2}$', news_date):
+                    print(f"  日期格式无效，跳过: {news.title}")
+                    continue
+
+                # 判断日期是否在近3个月内
+                if news_date >= cutoff_date_str:
+                    filtered_news.append(news)
+                else:
+                    print(f"  新闻已过滤（日期过早）: {news.title}, 日期: {news_date}")
+
+            except Exception as e:
+                print(f"  处理日期失败: {str(e)}, 跳过新闻: {news.title}")
+                continue
+
+        print(f"日期过滤: {len(accumulated_news)} -> {len(filtered_news)} 条")
+
+        # 3. 历史记录去重
+        new_deduplicated_news = []
+        duplicate_count = 0
+
+        for news in filtered_news:
+            # 检查URL是否在历史记录中
+            if news.url in history_urls:
+                duplicate_count += 1
+                continue
+
+            # 检查标题是否在历史记录中
+            if news.title in history_titles:
+                duplicate_count += 1
+                continue
+
+            # 检查URL是否已在本次累积列表中
+            if any(n.url == news.url for n in all_deduplicated_news):
+                duplicate_count += 1
+                continue
+
+            # 检查标题是否已在本次累积列表中
+            if any(n.title == news.title for n in all_deduplicated_news):
+                duplicate_count += 1
+                continue
+
+            # 通过所有去重检查
+            new_deduplicated_news.append(news)
+
+        print(f"历史去重: 去重 {duplicate_count} 条，新增 {len(new_deduplicated_news)} 条")
+
+        # 4. 累积去重后的新闻
+        all_deduplicated_news.extend(new_deduplicated_news)
+
+        print(f"\n[主循环-{search_count}] 进度汇总:")
+        print(f"  本次新增: {len(new_deduplicated_news)} 条")
+        print(f"  累积总数: {len(all_deduplicated_news)} 条")
+        print(f"  目标数量: {target_count} 条")
+
+        # 5. 检查是否达到目标
+        if len(all_deduplicated_news) >= target_count:
+            print(f"✅ 已达到目标数量 ({len(all_deduplicated_news)} >= {target_count})，停止搜索")
+            break
+        elif search_count < max_searches:
+            # 未达到目标且还有搜索机会，等待30秒后继续
+            print(f"\n⏳ 未达到目标，等待30秒后继续下一次搜索...")
+            print(f"   当前进度: {len(all_deduplicated_news)}/{target_count} 条")
+            print(f"   搜索进度: {search_count}/{max_searches} 次")
+            time.sleep(30)
+            print(f"✅ 等待结束，开始下一次搜索\n")
+
+    # 6. 最终结果
     print("\n" + "=" * 80)
-    print("最终结果:")
-    print(f"  新闻数量: {len(deduplicated_news)}")
-    print(f"  目标数量: 10")
+    print("主循环执行完成")
+    print(f"总搜索次数: {search_count}")
+    print(f"最终新闻数量: {len(all_deduplicated_news)}")
+    print(f"目标数量: {target_count}")
     print("=" * 80)
 
-    if len(deduplicated_news) >= 10:
+    if len(all_deduplicated_news) >= target_count:
         print("✅ 已达到目标数量，继续发送邮件")
-        message = f"循环搜索完成，共 {search_count} 次搜索，获取 {len(deduplicated_news)} 条新闻"
+        message = f"循环搜索完成，共 {search_count} 次搜索，获取 {len(all_deduplicated_news)} 条新闻"
         return SearchUntil10Output(
-            filtered_news_list=filtered_news,
-            deduplicated_news_list=deduplicated_news,
+            filtered_news_list=all_deduplicated_news,  # 已经过滤和去重
+            deduplicated_news_list=all_deduplicated_news,
             message=message
         )
     else:
         print("❌ 未达到目标数量，不发送邮件")
-        message = f"循环搜索完成，共 {search_count} 次搜索，仅获取 {len(deduplicated_news)} 条新闻（目标10条），不发送邮件"
+        message = f"循环搜索完成，共 {search_count} 次搜索，仅获取 {len(all_deduplicated_news)} 条新闻（目标10条），不发送邮件"
         return SearchUntil10Output(
             filtered_news_list=[],  # 返回空列表
             deduplicated_news_list=[],  # 返回空列表
