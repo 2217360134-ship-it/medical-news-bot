@@ -1000,7 +1000,7 @@ def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runt
 
     print("=" * 80)
     print("开始执行 search_until_10_node - 循环搜索新闻")
-    print("目标: 10条新闻，最大搜索次数: 3次")
+    print("目标: 10条新闻，最大搜索次数: 8次")
     print("=" * 80)
 
     # 导入子图
@@ -1009,7 +1009,7 @@ def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runt
     # 调用子图，循环搜索
     loop_result = loop_graph.invoke({
         "target_count": 10,
-        "max_searches": 3,
+        "max_searches": 8,
         "search_count": 0,
         "accumulated_news": []
     })

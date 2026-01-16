@@ -147,7 +147,7 @@ class LoopGlobalState(BaseModel):
     accumulated_news: List[NewsItem] = Field(default=[], description="累积的新闻列表")
     search_count: int = Field(default=0, description="已搜索次数")
     target_count: int = Field(default=10, description="目标新闻数量")
-    max_searches: int = Field(default=3, description="最大搜索次数")
+    max_searches: int = Field(default=8, description="最大搜索次数")
     current_batch_news: List[NewsItem] = Field(default=[], description="当前批次搜索到的新闻")
     has_reached_target: bool = Field(default=False, description="是否已达到目标数量")
 

@@ -256,6 +256,8 @@ def accumulate_node(state: LoopGlobalState, config: RunnableConfig, runtime: Run
     title: 累积新闻
     desc: 将去重后的当前批次新闻累积到总列表，并更新搜索次数
     """
+    import time
+
     print("=" * 60)
     print(f"[循环搜索-{state.search_count + 1}] 累积新闻")
     print(f"  新增: {len(state.current_batch_news)} 条")
@@ -268,6 +270,14 @@ def accumulate_node(state: LoopGlobalState, config: RunnableConfig, runtime: Run
     print(f"  累积后: {len(new_accumulated)} 条")
     print(f"  搜索次数: {new_search_count}")
     print("=" * 60)
+
+    # 检查是否需要继续搜索，如果需要则等待30秒
+    if len(new_accumulated) < state.target_count and new_search_count < state.max_searches:
+        print(f"\n⏳ 等待30秒后继续下一次搜索...")
+        print(f"   当前进度: {len(new_accumulated)}/{state.target_count} 条")
+        print(f"   搜索进度: {new_search_count}/{state.max_searches} 次")
+        time.sleep(30)
+        print(f"✅ 等待结束，开始下一次搜索\n")
 
     # 返回更新后的状态
     return {
