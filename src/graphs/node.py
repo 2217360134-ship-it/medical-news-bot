@@ -993,15 +993,15 @@ def save_news_history_node(state: SaveNewsHistoryInput, config: RunnableConfig, 
 
 def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runtime: Runtime[Context]) -> SearchUntil10Output:
     """
-    title: 循环搜索直到达到5条新闻
-    desc: 循环执行"搜索-日期过滤-历史去重-检查数量"流程，直到去重后数量达到5条或达到最大搜索次数（8次），每次间隔30秒
+    title: 循环搜索新闻
+    desc: 循环执行"搜索-日期过滤-历史去重-检查数量"流程，搜索数量范围为5-20条（如果超过20条只发送前20条），最大搜索8次，每次间隔30秒
     """
     import time
     ctx = runtime.context
 
     print("=" * 80)
     print("开始执行 search_until_10_node - 循环搜索新闻")
-    print("目标: 5条新闻，最大搜索次数: 8次")
+    print("发送数量范围: 5-20条，最大搜索次数: 8次")
     print("=" * 80)
 
     # 导入子图
@@ -1011,7 +1011,8 @@ def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runt
     all_accumulated_news = []  # 所有累积的新闻
     all_deduplicated_news = []  # 所有去重后的新闻（累积）
     search_count = 0  # 总搜索次数
-    target_count = 5  # 目标数量
+    min_target = 5  # 最小发送数量
+    max_target = 20  # 最大发送数量
     max_searches = 8  # 最大搜索次数
 
     # 获取历史记录（用于去重）
@@ -1039,7 +1040,8 @@ def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runt
     print(f"日期过滤截止日期: {cutoff_date_str}")
 
     # 主循环：搜索 → 日期过滤 → 历史去重 → 累积 → 检查数量
-    while search_count < max_searches and len(all_deduplicated_news) < target_count:
+    # 搜索到至少20条，或者达到最大搜索次数
+    while search_count < max_searches and len(all_deduplicated_news) < max_target:
         search_count += 1
         print("\n" + "=" * 80)
         print(f"[主循环-{search_count}/{max_searches}] 开始搜索")
@@ -1047,7 +1049,7 @@ def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runt
 
         # 1. 调用子图搜索一批新闻（只搜索1次）
         loop_result = loop_graph.invoke({
-            "target_count": 5,  # 子图内部的目标
+            "target_count": 20,  # 子图内部的目标（最多搜索20条）
             "max_searches": 1,   # 子图只搜索1次
             "search_count": 0,
             "accumulated_news": []
@@ -1117,42 +1119,57 @@ def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runt
         print(f"\n[主循环-{search_count}] 进度汇总:")
         print(f"  本次新增: {len(new_deduplicated_news)} 条")
         print(f"  累积总数: {len(all_deduplicated_news)} 条")
-        print(f"  目标数量: {target_count} 条")
+        print(f"  最大发送数量: {max_target} 条")
 
-        # 5. 检查是否达到目标
-        if len(all_deduplicated_news) >= target_count:
-            print(f"✅ 已达到目标数量 ({len(all_deduplicated_news)} >= {target_count})，停止搜索")
+        # 5. 检查是否达到最大目标
+        if len(all_deduplicated_news) >= max_target:
+            print(f"✅ 已达到最大发送数量 ({len(all_deduplicated_news)} >= {max_target})，停止搜索")
             break
         elif search_count < max_searches:
-            # 未达到目标且还有搜索机会，等待30秒后继续
-            print(f"\n⏳ 未达到目标，等待30秒后继续下一次搜索...")
-            print(f"   当前进度: {len(all_deduplicated_news)}/{target_count} 条")
+            # 未达到最大目标且还有搜索机会，等待30秒后继续
+            print(f"\n⏳ 未达到最大目标，等待30秒后继续下一次搜索...")
+            print(f"   当前进度: {len(all_deduplicated_news)}/{max_target} 条")
             print(f"   搜索进度: {search_count}/{max_searches} 次")
             time.sleep(30)
             print(f"✅ 等待结束，开始下一次搜索\n")
 
-    # 6. 最终结果
+    # 6. 最终结果处理：根据数量范围决定发送哪些新闻
     print("\n" + "=" * 80)
     print("主循环执行完成")
     print(f"总搜索次数: {search_count}")
-    print(f"最终新闻数量: {len(all_deduplicated_news)}")
-    print(f"目标数量: {target_count}")
+    print(f"累积新闻总数: {len(all_deduplicated_news)}")
+    print(f"发送数量范围: {min_target}-{max_target} 条")
     print("=" * 80)
 
-    if len(all_deduplicated_news) >= target_count:
-        print("✅ 已达到目标数量，继续发送邮件")
-        message = f"循环搜索完成，共 {search_count} 次搜索，获取 {len(all_deduplicated_news)} 条新闻"
+    # 根据数量范围决定发送哪些新闻
+    total_news = len(all_deduplicated_news)
+
+    if total_news < min_target:
+        # 数量 < 5，不发送
+        print(f"❌ 新闻数量不足 ({total_news} < {min_target})，不发送邮件")
+        message = f"循环搜索完成，共 {search_count} 次搜索，仅获取 {total_news} 条新闻（最少需要{min_target}条），不发送邮件"
         return SearchUntil10Output(
-            filtered_news_list=all_deduplicated_news,  # 已经过滤和去重
+            filtered_news_list=[],  # 返回空列表
+            deduplicated_news_list=[],  # 返回空列表
+            message=message
+        )
+    elif total_news <= max_target:
+        # 5 ≤ 数量 ≤ 20，全部发送
+        print(f"✅ 新闻数量在范围内 ({total_news})，全部发送")
+        message = f"循环搜索完成，共 {search_count} 次搜索，获取 {total_news} 条新闻，全部发送"
+        return SearchUntil10Output(
+            filtered_news_list=all_deduplicated_news,
             deduplicated_news_list=all_deduplicated_news,
             message=message
         )
     else:
-        print("❌ 未达到目标数量，不发送邮件")
-        message = f"循环搜索完成，共 {search_count} 次搜索，仅获取 {len(all_deduplicated_news)} 条新闻（目标5条），不发送邮件"
+        # 数量 > 20，只发送前20条
+        news_to_send = all_deduplicated_news[:max_target]
+        print(f"✅ 新闻数量超过最大值 ({total_news} > {max_target})，只发送前 {max_target} 条")
+        message = f"循环搜索完成，共 {search_count} 次搜索，获取 {total_news} 条新闻，本次发送前 {max_target} 条"
         return SearchUntil10Output(
-            filtered_news_list=[],  # 返回空列表
-            deduplicated_news_list=[],  # 返回空列表
+            filtered_news_list=news_to_send,  # 只发送前20条
+            deduplicated_news_list=news_to_send,
             message=message
         )
 

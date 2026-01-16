@@ -40,7 +40,7 @@ def check_has_news(state: GlobalState) -> str:
 builder.set_entry_point("split_emails")
 
 # 添加边 - 线性工作流架构
-# split_emails -> search_until_10（循环搜索直到达到10条）
+# split_emails -> search_until_10（循环搜索5-20条新闻）
 builder.add_edge("split_emails", "search_until_10")
 
 # search_until_10 -> 条件判断

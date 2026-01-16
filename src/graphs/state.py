@@ -195,12 +195,12 @@ class CheckThresholdInput(BaseModel):
 
 
 class SearchUntil10Input(BaseModel):
-    """循环搜索直到达到10条新闻节点的输入"""
+    """循环搜索5-20条新闻节点的输入"""
     pass
 
 
 class SearchUntil10Output(BaseModel):
-    """循环搜索直到达到10条新闻节点的输出"""
-    filtered_news_list: List[NewsItem] = Field(default=[], description="过滤后的新闻列表（近3个月内）")
-    deduplicated_news_list: List[NewsItem] = Field(default=[], description="去重后的新闻列表（去除历史重复）")
+    """循环搜索5-20条新闻节点的输出（最多发送20条）"""
+    filtered_news_list: List[NewsItem] = Field(default=[], description="过滤后的新闻列表（近3个月内，最多20条）")
+    deduplicated_news_list: List[NewsItem] = Field(default=[], description="去重后的新闻列表（去除历史重复，最多20条）")
     message: str = Field(..., description="执行结果消息")
