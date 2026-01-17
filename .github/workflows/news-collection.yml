@@ -1,10 +1,9 @@
 name: News Collection Workflow
 
 on:
-  # 每天上午6点自动触发（使用UTC时间，北京时间上午6点 = UTC时间前一天晚上10点）
+  # 每天北京时间上午8点自动触发（UTC时间凌晨0点）
   schedule:
-    - cron: '0 22 * * *'
-    - cron: '0 6 * * *'  # UTC时间上午6点（北京时间下午2点）
+    - cron: '0 0 * * *'
 
   # 允许手动触发
   workflow_dispatch:
