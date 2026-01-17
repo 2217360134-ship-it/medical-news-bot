@@ -718,12 +718,6 @@ def send_email_node(state: SendEmailInput, config: RunnableConfig, runtime: Runt
                         <p>日期: {today}</p>
                     </div>
                     
-                    <div class="attachment-note">
-                        <p><strong>📎 详细数据已作为附件发送</strong></p>
-                        <p>附件文件: {state.table_filename}</p>
-                        <p>包含 {len(state.enriched_news_list)} 条新闻记录</p>
-                    </div>
-                    
                     <div class="summary">
                         <p><strong>共收集到 {len(state.enriched_news_list)} 条相关新闻</strong></p>
                         <p>来源: 网络搜集</p>
