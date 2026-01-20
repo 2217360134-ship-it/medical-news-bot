@@ -987,14 +987,14 @@ def save_news_history_node(state: SaveNewsHistoryInput, config: RunnableConfig, 
 
 def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runtime: Runtime[Context]) -> SearchUntil10Output:
     """
-    title: 循环搜索新闻
-    desc: 循环执行"搜索-日期过滤-历史去重-检查数量"流程，搜索数量范围为5-20条（如果超过20条只发送前20条）
+    title: 搜索新闻
+    desc: 搜索医疗器械和医美相关新闻，执行日期过滤、历史去重、检查数量流程，搜索数量范围为5-20条（如果超过20条只发送前20条）
     """
     import time
     ctx = runtime.context
 
     print("=" * 80)
-    print("开始执行 search_until_10_node - 循环搜索新闻")
+    print("开始执行 search_until_10_node - 搜索新闻")
     print("发送数量范围: 5-20条")
     print("=" * 80)
 
@@ -1006,7 +1006,7 @@ def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runt
     search_count = 0  # 总搜索次数
     min_target = 5  # 最小发送数量
     max_target = 20  # 最大发送数量
-    max_searches = 8  # 最大搜索次数
+    max_searches = 1  # 最大搜索次数
 
     # 获取历史记录（用于去重）
     history_urls = set()
@@ -1286,7 +1286,7 @@ def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runt
 
     # 8. 最终结果处理：根据数量范围决定发送哪些新闻
     print("\n" + "=" * 80)
-    print("主循环执行完成")
+    print("搜索执行完成")
     print(f"总搜索次数: {search_count}")
     print(f"累积新闻总数: {len(all_deduplicated_news)}")
     print(f"发送数量范围: {min_target}-{max_target} 条")
@@ -1298,7 +1298,7 @@ def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runt
     if total_news < min_target:
         # 数量 < 5，不发送
         print(f"❌ 新闻数量不足 ({total_news} < {min_target})，不发送邮件")
-        message = f"循环搜索完成，共 {search_count} 次搜索，仅获取 {total_news} 条新闻（最少需要{min_target}条），不发送邮件"
+        message = f"搜索完成，共 {search_count} 次搜索，仅获取 {total_news} 条新闻（最少需要{min_target}条），不发送邮件"
         return SearchUntil10Output(
             filtered_news_list=[],  # 返回空列表
             deduplicated_news_list=[],  # 返回空列表
@@ -1307,7 +1307,7 @@ def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runt
     elif total_news <= max_target:
         # 5 ≤ 数量 ≤ 20，全部发送
         print(f"✅ 新闻数量在范围内 ({total_news})，全部发送")
-        message = f"循环搜索完成，共 {search_count} 次搜索，获取 {total_news} 条新闻，全部发送"
+        message = f"搜索完成，共 {search_count} 次搜索，获取 {total_news} 条新闻，全部发送"
         return SearchUntil10Output(
             filtered_news_list=all_deduplicated_news,
             deduplicated_news_list=all_deduplicated_news,
@@ -1317,7 +1317,7 @@ def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runt
         # 数量 > 20，只发送前20条
         news_to_send = all_deduplicated_news[:max_target]
         print(f"✅ 新闻数量超过最大值 ({total_news} > {max_target})，只发送前 {max_target} 条")
-        message = f"循环搜索完成，共 {search_count} 次搜索，获取 {total_news} 条新闻，本次发送前 {max_target} 条"
+        message = f"搜索完成，共 {search_count} 次搜索，获取 {total_news} 条新闻，本次发送前 {max_target} 条"
         return SearchUntil10Output(
             filtered_news_list=news_to_send,  # 只发送前20条
             deduplicated_news_list=news_to_send,
