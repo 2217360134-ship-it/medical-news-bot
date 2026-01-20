@@ -998,11 +998,10 @@ def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runt
     print("发送数量范围: 5-20条")
     print("=" * 80)
 
-    # 导入子图
-    from graphs.loop_graph import loop_graph
+    # 导入网络搜索函数
+    from tools.web_search_tool import web_search
 
     # 初始化变量
-    all_accumulated_news = []  # 所有累积的新闻
     all_deduplicated_news = []  # 所有去重后的新闻（累积）
     search_count = 0  # 总搜索次数
     min_target = 5  # 最小发送数量
@@ -1033,28 +1032,172 @@ def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runt
     cutoff_date_str = three_months_ago.strftime('%Y-%m-%d')
     print(f"日期过滤截止日期: {cutoff_date_str}")
 
-    # 主循环：搜索 → 日期过滤 → 历史去重 → 累积 → 检查数量
-    # 搜索到至少20条，或者达到最大搜索次数
+    # 定义搜索参数（与子图保持一致）
+    target_sites_batch1 = "toutiao.com|sohu.com|qq.com|163.com|ifeng.com"
+    target_sites_batch2 = "sina.com.cn|thepaper.cn|36kr.com"
+    target_sites_batch3 = "ylqx.qgyyzs.net|finance.sina.com.cn"
+
+    batch1_queries = [
+        "医疗器械公司",
+        "医疗器械产品",
+        "医疗器械技术",
+        "医美公司",
+        "医美产品",
+        "医美技术"
+    ]
+
+    batch2_queries = [
+        "医疗设备",
+        "诊断设备",
+        "激光美容",
+        "整形美容",
+        "微整形"
+    ]
+
+    batch3_queries = [
+        "IVD 体外诊断",
+        "医疗器械融资",
+        "医疗器械上市",
+        "医美融资",
+        "医美上市"
+    ]
+
+    # 主循环：搜索 → 批次内去重 → 日期过滤 → 历史去重 → 累积 → 检查数量
     while search_count < max_searches and len(all_deduplicated_news) < max_target:
         search_count += 1
         print("\n" + "=" * 80)
-        print(f"[主循环-{search_count}/{max_searches}] 开始搜索")
+        print(f"[循环-{search_count}/{max_searches}] 开始搜索")
         print("=" * 80)
 
-        # 1. 调用子图搜索一批新闻（只搜索1次）
-        loop_result = loop_graph.invoke({
-            "target_count": 20,  # 子图内部的目标（最多搜索20条）
-            "max_searches": 1,   # 子图只搜索1次
-            "search_count": 0,
-            "accumulated_news": []
-        })
+        # 1. 搜索新闻（整合子图的搜索逻辑）
+        all_web_items = []
+        search_success_count = 0
 
-        accumulated_news = loop_result.get("accumulated_news", [])
-        print(f"子图返回: {len(accumulated_news)} 条原始新闻")
+        # 第一批次
+        print(f"开始搜索第一批次网站: {target_sites_batch1}")
+        for idx, query in enumerate(batch1_queries, 1):
+            try:
+                print(f"  [批次1-{idx}/{len(batch1_queries)}] 搜索: '{query}'")
 
-        # 2. 日期过滤（近3个月）
+                web_items, _, _, _ = web_search(
+                    ctx=ctx,
+                    query=query,
+                    search_type="web",
+                    count=10,
+                    need_summary=True,
+                    need_content=True,
+                    sites=target_sites_batch1
+                )
+
+                print(f"    ✅ 获取到 {len(web_items)} 条新闻")
+                all_web_items.extend(web_items)
+                search_success_count += 1
+
+            except Exception as e:
+                print(f"    ❌ 搜索失败: {str(e)}")
+                continue
+
+        # 第二批次
+        print(f"开始搜索第二批次网站: {target_sites_batch2}")
+        for idx, query in enumerate(batch2_queries, 1):
+            try:
+                print(f"  [批次2-{idx}/{len(batch2_queries)}] 搜索: '{query}'")
+
+                web_items, _, _, _ = web_search(
+                    ctx=ctx,
+                    query=query,
+                    search_type="web",
+                    count=10,
+                    need_summary=True,
+                    need_content=True,
+                    sites=target_sites_batch2
+                )
+
+                print(f"    ✅ 获取到 {len(web_items)} 条新闻")
+                all_web_items.extend(web_items)
+                search_success_count += 1
+
+            except Exception as e:
+                print(f"    ❌ 搜索失败: {str(e)}")
+                continue
+
+        # 第三批次
+        print(f"开始搜索第三批次网站: {target_sites_batch3}")
+        for idx, query in enumerate(batch3_queries, 1):
+            try:
+                print(f"  [批次3-{idx}/{len(batch3_queries)}] 搜索: '{query}'")
+
+                web_items, _, _, _ = web_search(
+                    ctx=ctx,
+                    query=query,
+                    search_type="web",
+                    count=10,
+                    need_summary=True,
+                    need_content=True,
+                    sites=target_sites_batch3
+                )
+
+                print(f"    ✅ 获取到 {len(web_items)} 条新闻")
+                all_web_items.extend(web_items)
+                search_success_count += 1
+
+            except Exception as e:
+                print(f"    ❌ 搜索失败: {str(e)}")
+                continue
+
+        print(f"\n搜索完成: 成功 {search_success_count} 个查询，原始 {len(all_web_items)} 条")
+
+        # 2. 转换为NewsItem格式
+        raw_news_list = []
+        for item in all_web_items:
+            if not item.Url:
+                continue
+
+            # 解析日期
+            if item.PublishTime:
+                try:
+                    publish_date = item.PublishTime.split('T')[0]
+                except:
+                    publish_date = today.strftime('%Y-%m-%d')
+            else:
+                publish_date = today.strftime('%Y-%m-%d')
+
+            news_item = NewsItem(
+                title=item.Title or "",
+                date=publish_date,
+                url=item.Url,
+                summary=item.Snippet or "",
+                content=item.Content or "",
+                keywords=[]
+            )
+            raw_news_list.append(news_item)
+
+        print(f"转换为NewsItem: {len(raw_news_list)} 条")
+
+        # 3. 批次内去重（URL和标题）
+        seen_urls = set()
+        unique_by_url = []
+        for news in raw_news_list:
+            if news.url not in seen_urls:
+                seen_urls.add(news.url)
+                unique_by_url.append(news)
+
+        seen_titles = set()
+        batch_deduplicated_news = []
+        for news in unique_by_url:
+            normalized_title = news.title.lower().strip()
+            for suffix in ['| toutiao', '- 今日头条', '_头条', '_新闻', '_资讯']:
+                normalized_title = normalized_title.replace(suffix.lower(), '')
+
+            if normalized_title not in seen_titles:
+                seen_titles.add(normalized_title)
+                batch_deduplicated_news.append(news)
+
+        print(f"批次内去重: {len(raw_news_list)} -> {len(batch_deduplicated_news)} 条")
+
+        # 4. 日期过滤（近3个月）
         filtered_news = []
-        for news in accumulated_news:
+        for news in batch_deduplicated_news:
             try:
                 # 解析新闻日期
                 news_date = news.date if news.date else today.strftime('%Y-%m-%d')
@@ -1075,9 +1218,9 @@ def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runt
                 print(f"  处理日期失败: {str(e)}, 跳过新闻: {news.title}")
                 continue
 
-        print(f"日期过滤: {len(accumulated_news)} -> {len(filtered_news)} 条")
+        print(f"日期过滤: {len(batch_deduplicated_news)} -> {len(filtered_news)} 条")
 
-        # 3. 历史记录去重
+        # 5. 历史记录去重
         new_deduplicated_news = []
         duplicate_count = 0
 
@@ -1107,27 +1250,41 @@ def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runt
 
         print(f"历史去重: 去重 {duplicate_count} 条，新增 {len(new_deduplicated_news)} 条")
 
-        # 4. 累积去重后的新闻
+        # 6. 累积去重后的新闻
         all_deduplicated_news.extend(new_deduplicated_news)
 
-        print(f"\n[主循环-{search_count}] 进度汇总:")
+        print(f"\n[循环-{search_count}] 进度汇总:")
         print(f"  本次新增: {len(new_deduplicated_news)} 条")
         print(f"  累积总数: {len(all_deduplicated_news)} 条")
         print(f"  最大发送数量: {max_target} 条")
 
-        # 5. 检查是否达到最大目标
+        # 7. 检查是否达到最大目标
         if len(all_deduplicated_news) >= max_target:
             print(f"✅ 已达到最大发送数量 ({len(all_deduplicated_news)} >= {max_target})，停止搜索")
             break
         elif search_count < max_searches:
-            # 未达到最大目标且还有搜索机会，等待30秒后继续
-            print(f"\n⏳ 未达到最大目标，等待30秒后继续下一次搜索...")
+            # 未达到最大目标且还有搜索机会，智能等待后继续
+            # 根据距离目标的差距动态调整等待时间
+            remaining = max_target - len(all_deduplicated_news)
+            remaining_searches = max_searches - search_count
+
+            if remaining <= 5 or remaining_searches <= 2:
+                # 接近目标或剩余搜索次数少，短等待
+                wait_time = 5
+            elif remaining <= 10:
+                # 中等进度，中等等待
+                wait_time = 10
+            else:
+                # 刚开始，较长等待
+                wait_time = 15
+
+            print(f"\n⏳ 未达到最大目标，等待 {wait_time} 秒后继续下一次搜索...")
             print(f"   当前进度: {len(all_deduplicated_news)}/{max_target} 条")
             print(f"   搜索进度: {search_count}/{max_searches} 次")
-            time.sleep(30)
+            time.sleep(wait_time)
             print(f"✅ 等待结束，开始下一次搜索\n")
 
-    # 6. 最终结果处理：根据数量范围决定发送哪些新闻
+    # 8. 最终结果处理：根据数量范围决定发送哪些新闻
     print("\n" + "=" * 80)
     print("主循环执行完成")
     print(f"总搜索次数: {search_count}")
