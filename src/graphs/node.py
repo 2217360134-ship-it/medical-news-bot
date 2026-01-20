@@ -988,14 +988,14 @@ def save_news_history_node(state: SaveNewsHistoryInput, config: RunnableConfig, 
 def search_until_10_node(state: SearchUntil10Input, config: RunnableConfig, runtime: Runtime[Context]) -> SearchUntil10Output:
     """
     title: 循环搜索新闻
-    desc: 循环执行"搜索-日期过滤-历史去重-检查数量"流程，搜索数量范围为5-20条（如果超过20条只发送前20条），最大搜索8次，每次间隔30秒
+    desc: 循环执行"搜索-日期过滤-历史去重-检查数量"流程，搜索数量范围为5-20条（如果超过20条只发送前20条）
     """
     import time
     ctx = runtime.context
 
     print("=" * 80)
     print("开始执行 search_until_10_node - 循环搜索新闻")
-    print("发送数量范围: 5-20条，最大搜索次数: 8次")
+    print("发送数量范围: 5-20条")
     print("=" * 80)
 
     # 导入子图
